@@ -105,32 +105,20 @@ async function makeLLMRequest(prompt, filePath) {
     });
 
     const response = result.response;
-    
-    // Get the text content properly
-    let content = "";
-    if (response.candidates && response.candidates[0]) {
-      const candidate = response.candidates[0];
-      if (candidate.content && candidate.content.parts) {
-        content = candidate.content.parts
-          .filter(part => part.text)
-          .map(part => part.text)
-          .join("\n");
-      }
-    }
-    
-    // Fallback to response.text() if the above doesn't work
-    if (!content) {
-      content = response.text();
-    }
 
+    // Extract text content directly using the text() method
+    const content = response.text();
     const usage = response.usageMetadata;
 
-    console.log("Gemini API Response Content:", content);
-    console.log("Token Usage:", usage);
+    console.log("=== Gemini Response ===");
+    console.log("Content:", content);
+    console.log("Content length:", content.length);
+    console.log("Token usage:", usage);
+    console.log("======================");
 
     return {
       success: true,
-      content,
+      content: content,
       tokensUsed: usage ? usage.totalTokenCount : 0,
       model: MODEL_NAME,
     };
