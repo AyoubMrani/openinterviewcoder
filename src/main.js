@@ -9,19 +9,37 @@ const {
   Menu,
   Tray,
 } = require("electron");
+app.disableHardwareAcceleration();
 const path = require("path");
 const {
   ensureScreenRecordingPermission,
   captureFullScreen,
   getRecentScreenshots,
 } = require("./screenshot");
-const { initializeLLMService } = require("./llm-service");
+const {
+  initializeLLMService,
+  getModelInfo,
+  makeLLMRequest,
+} = require("./llm-service");
 const config = require("./config");
+
+// +++ ADD TOKEN TRACKING VARIABLES +++
+let sessionTotalTokens = 0;
+let maxInputTokens = 1048576; // Default, will be updated
+
 
 // IPC handlers for settings
 ipcMain.handle("get-settings", () => {
   return {
-    openaiKey: config.getOpenAIKey(),
+    geminiKey: config.getGeminiKey(), // +++ CHANGED +++
+  };
+});
+
+// +++ ADD IPC HANDLER FOR TOKEN INFO +++
+ipcMain.handle("get-token-info", () => {
+  return {
+    current: sessionTotalTokens,
+    max: maxInputTokens,
   };
 });
 
@@ -34,8 +52,8 @@ ipcMain.handle("scroll-chat", (event, direction) => {
 });
 
 ipcMain.handle("save-settings", async (event, settings) => {
-  if (settings.openaiKey) {
-    config.setOpenAIKey(settings.openaiKey);
+  if (settings.geminiKey) { // +++ CHANGED +++
+    config.setGeminiKey(settings.geminiKey); // +++ CHANGED +++
     // Reinitialize LLM service with new API key
     await initializeLLMService();
   }
@@ -90,6 +108,68 @@ ipcMain.handle("hide-window", () => {
   }
 });
 
+// +++ NEW IPC HANDLERS FOR GEMINI +++
+ipcMain.handle("analyze-screenshot", async (event, data) => {
+  try {
+    const result = await makeLLMRequest(
+      "Analyze this screenshot and provide insights.",
+      data.filePath
+    );
+
+    if (result.success) {
+      sessionTotalTokens += result.tokensUsed;
+      event.sender.send("llm-response", {
+        success: true,
+        content: result.content,
+      });
+      event.sender.send("token-usage-updated", {
+        current: sessionTotalTokens,
+        max: maxInputTokens,
+      });
+    }
+    // Return a plain, cloneable object on success
+    return { success: true };
+  } catch (error) {
+    // On failure, send an error message to the renderer
+    event.sender.send("llm-response", {
+      success: false,
+      error: error.message,
+    });
+    // And RETURN a plain, cloneable object as the rejection value
+    return { success: false, error: error.message };
+  }
+});
+
+
+ipcMain.handle("test-response", async (event, prompt) => {
+  try {
+    const result = await makeLLMRequest(prompt, null); // No file for test
+
+    if (result.success) {
+      sessionTotalTokens += result.tokensUsed;
+      event.sender.send("llm-response", {
+        success: true,
+        content: result.content,
+      });
+      event.sender.send("token-usage-updated", {
+        current: sessionTotalTokens,
+        max: maxInputTokens,
+      });
+    }
+    // Return a plain, cloneable object on success
+    return { success: true };
+  } catch (error) {
+    // On failure, send an error message to the renderer
+    event.sender.send("llm-response", {
+      success: false,
+      error: error.message,
+    });
+    // And RETURN a plain, cloneable object as the rejection value
+    return { success: false, error: error.message };
+  }
+});
+
+
 let invisibleWindow;
 let settingsWindow = null;
 let tray = null;
@@ -99,27 +179,27 @@ function createMenuTemplate() {
   return [
     ...(process.platform === "darwin"
       ? [
-          {
-            label: app.name,
-            submenu: [
-              { role: "about" },
-              { type: "separator" },
-              {
-                label: "Preferences...",
-                accelerator: "Command+,",
-                click: () => createSettingsWindow(),
-              },
-              { type: "separator" },
-              { role: "services" },
-              { type: "separator" },
-              { role: "hide" },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-        ]
+        {
+          label: app.name,
+          submenu: [
+            { role: "about" },
+            { type: "separator" },
+            {
+              label: "Preferences...",
+              accelerator: "Command+,",
+              click: () => createSettingsWindow(),
+            },
+            { type: "separator" },
+            { role: "services" },
+            { type: "separator" },
+            { role: "hide" },
+            { role: "hideOthers" },
+            { role: "unhide" },
+            { type: "separator" },
+            { role: "quit" },
+          ],
+        },
+      ]
       : []),
     {
       label: "Edit",
@@ -188,11 +268,6 @@ function createInvisibleWindow() {
   if (process.argv.includes("--debug")) {
     invisibleWindow.webContents.openDevTools();
   }
-
-  // Handle window visibility
-  invisibleWindow.on("show", () => {
-    invisibleWindow.showInactive();
-  });
 
   // Prevent the window from being closed with mouse
   invisibleWindow.on("close", (event) => {
@@ -418,9 +493,18 @@ function registerShortcuts() {
 // When app is ready
 app.whenReady().then(async () => {
   // Load API key from config before initializing services
-  const apiKey = config.getOpenAIKey();
+  const apiKey = config.getGeminiKey(); // +++ CHANGED +++
   if (apiKey) {
-    process.env.OPENAI_API_KEY = apiKey;
+    // The library handles the key internally, no need for process.env
+    initializeLLMService();
+    try {
+      // Fetch model info on startup
+      const info = await getModelInfo();
+      maxInputTokens = info.input_token_limit;
+      console.log(`Model initialized. Max tokens: ${maxInputTokens}`);
+    } catch (e) {
+      console.error("Could not fetch model info on startup.", e.message);
+    }
   }
 
   createInvisibleWindow();
@@ -429,10 +513,12 @@ app.whenReady().then(async () => {
 
   // Create tray icon for Windows
   if (process.platform === "win32") {
-    tray = new Tray(path.join(__dirname, "../assets/OCTO.png"));
+    tray = new Tray(path.join(__dirname, "../assets/OCTO.png")); // Ensure you have this asset
     const contextMenu = Menu.buildFromTemplate([
       { label: "Show", click: () => invisibleWindow.show() },
       { label: "Hide", click: () => invisibleWindow.hide() },
+      // +++ ADDED THIS LINE +++
+      { label: "Settings...", click: () => createSettingsWindow() },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() },
     ]);

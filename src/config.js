@@ -2,14 +2,14 @@ const Store = require("electron-store");
 
 const store = new Store({
   defaults: {
-    openai: {
-      apiKey: "",
+    gemini: {
+      apiKey: "AIzaSyDFwGZwsu8eRTDlaMxp987PeCKG79EeXBM",
     },
   },
 });
 
 module.exports = {
-  getOpenAIKey: () => store.get("openai.apiKey") || "",
-  setOpenAIKey: (key) => store.set("openai.apiKey", key),
-  hasOpenAIKey: () => !!store.get("openai.apiKey"),
+  getGeminiKey: () => store.get("gemini.apiKey") || "",
+  setGeminiKey: (key) => store.set("gemini.apiKey", key),
+  hasGeminiKey: () => !!store.get("gemini.apiKey"),
 };

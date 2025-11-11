@@ -409,3 +409,37 @@ kbd {
   height: 100%;
   object-fit: contain;
 }
+
+/* +++ ADDED TOKEN PROGRESS BAR STYLES +++ */
+#token-progress-container {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  z-index: 100;
+  width: 200px;
+  -webkit-app-region: no-drag; /* Make it non-draggable */
+  pointer-events: all; /* Allow interaction if needed */
+}
+
+#token-progress-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: right;
+  margin-bottom: 4px;
+}
+
+#token-progress-bar-background {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#token-progress-bar {
+  width: 0%; /* Initial width */
+  height: 100%;
+  background-color: #007aff;
+  border-radius: 2px;
+  transition: width 0.3s ease-in-out;
+}

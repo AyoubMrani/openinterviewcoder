@@ -5,13 +5,14 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --debug",
+    "dev": "electron . --inspect",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "axios": "^0.27.2",
     "dotenv": "^16.4.5",
     "electron-store": "^8.2.0",

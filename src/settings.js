@@ -1,11 +1,11 @@
 // Settings management
 document.addEventListener("DOMContentLoaded", async () => {
   // Get all form elements
-  const openaiKeyInput = document.getElementById("openaiKey");
+  const geminiKeyInput = document.getElementById("geminiKey");
   const saveButton = document.getElementById("saveButton");
 
   // Verify all elements exist
-  if (!openaiKeyInput || !saveButton) {
+  if (!geminiKeyInput || !saveButton) {
     console.error("Required DOM elements not found");
     return;
   }
@@ -15,8 +15,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const settings = await window.electronAPI.getSettings();
 
     // Apply settings to form elements
-    if (settings && settings.openaiKey) {
-      openaiKeyInput.value = settings.openaiKey;
+    if (settings && settings.geminiKey) { // +++ CHANGED +++
+      geminiKeyInput.value = settings.geminiKey; // +++ CHANGED +++
     }
   } catch (error) {
     console.error("Error loading settings:", error);
@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Handle save button click
   saveButton.addEventListener("click", async () => {
     const settings = {
-      openaiKey: openaiKeyInput.value.trim(),
+      geminiKey: geminiKeyInput.value.trim(), // +++ CHANGED +++
     };
 
     try {
@@ -39,5 +39,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       console.error("Error saving settings:", error);
       alert("Failed to save settings. Please try again.");
     }
+
   });
 });

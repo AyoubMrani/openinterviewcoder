@@ -23,8 +23,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onScreenshotCaptured: (callback) =>
     ipcRenderer.on("screenshot-captured", (event, value) => callback(value)),
   analyzeScreenshot: (data) => ipcRenderer.invoke("analyze-screenshot", data),
-  onStreamUpdate: (callback) =>
-    ipcRenderer.on("stream-update", (event, value) => callback(value)),
+  testResponse: (prompt) => ipcRenderer.invoke("test-response", prompt),
   getScreenshotsDirectory: () =>
     ipcRenderer.invoke("get-screenshots-directory"),
   getRecentScreenshots: () => ipcRenderer.invoke("get-recent-screenshots"),
@@ -53,6 +52,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Click-through mode
   onToggleMouseIgnore: (callback) =>
     ipcRenderer.on("toggle-mouse-ignore", (event, value) => callback(value)),
+
+  onLLMResponse: (callback) => ipcRenderer.on("llm-response", (event, value) => callback(value)),
+  getTokenInfo: () => ipcRenderer.invoke("get-token-info"),
+  onTokenUsageUpdated: (callback) =>
+    ipcRenderer.on("token-usage-updated", (event, value) => callback(value)),
+
 });
 
 // No need for additional electron context bridge since we're handling everything through electronAPI

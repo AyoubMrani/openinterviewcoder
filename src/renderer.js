@@ -1,9 +1,12 @@
 // DOM Elements
 const chatHistory = document.getElementById("chat-history");
 const typingIndicator = document.getElementById("typing-indicator");
+const tokenProgressText = document.getElementById("token-progress-text");
+const tokenProgressBar = document.getElementById("token-progress-bar");
 
 // Chat state
 let messages = [];
+let currentMessageId = null;
 
 // Initialize marked with options
 if (typeof marked === "undefined") {
@@ -18,6 +21,13 @@ if (typeof marked === "undefined") {
 // Initialize the UI
 document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
+  try {
+    const tokenInfo = await window.electronAPI.getTokenInfo();
+    updateTokenDisplay(tokenInfo.current, tokenInfo.max);
+  } catch (error) {
+    console.error("Could not get initial token info:", error);
+  }
+
 });
 
 // Set up event listeners
@@ -37,7 +47,13 @@ function setupEventListeners() {
   window.electronAPI.onResetChat(resetChat);
 
   // Handle response updates
-  window.electronAPI.onStreamUpdate(updateMessage);
+  window.electronAPI.onLLMResponse(handleLLMResponse);
+
+  // +++ ADDED LISTENER FOR TOKEN UPDATES +++
+  window.electronAPI.onTokenUsageUpdated((data) => {
+    updateTokenDisplay(data.current, data.max);
+  });
+
 
   // Handle chat scrolling
   window.electronAPI.onScrollChat((direction) => {
@@ -50,6 +66,41 @@ function setupEventListeners() {
       }
     }
   });
+}
+
+function updateTokenDisplay(current, max) {
+  if (!tokenProgressText || !tokenProgressBar) return;
+
+  const percentage = max > 0 ? (current / max) * 100 : 0;
+  tokenProgressText.textContent = `${current} / ${max} Tokens`;
+  tokenProgressBar.style.width = `${Math.min(percentage, 100)}%`;
+}
+
+function handleLLMResponse(data) {
+    console.log("LLM Response received by UI:", data);
+  typingIndicator.classList.remove("visible"); // Hide typing indicator
+
+  if (!data.success) {
+    addErrorMessage(data.error || "An unknown error occurred.");
+    return;
+  }
+
+  // Find the pending message element and update it
+  let messageEl = document.querySelector(`[data-message-id="${currentMessageId}"]`);
+  if (messageEl) {
+    const contentWrapper = messageEl.querySelector(".message-content");
+    contentWrapper.innerHTML = marked.parse(data.content);
+    scrollToBottom();
+  }
+
+  // Update the message in the state array
+  const messageIndex = messages.findIndex((m) => m.messageId === currentMessageId);
+  if (messageIndex !== -1) {
+    messages[messageIndex].content = data.content;
+    messages[messageIndex].status = "completed";
+  }
+
+  currentMessageId = null; // Reset for the next request
 }
 
 // Handle keyboard shortcuts
@@ -81,51 +132,51 @@ function scrollToBottom() {
 }
 
 // Update message
-function updateMessage(data) {
-  const { messageId, content, isComplete } = data;
-  console.log("updateMessage called:", {
-    messageId,
-    contentLength: content.length,
-    isComplete,
-  });
+// function updateMessage(data) {
+//   const { messageId, content, isComplete } = data;
+//   console.log("updateMessage called:", {
+//     messageId,
+//     contentLength: content.length,
+//     isComplete,
+//   });
 
-  // Find or create message element
-  let messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-  if (!messageEl) {
-    console.log("Creating new message element");
-    messageEl = createMessageElement(messageId);
-    chatHistory.appendChild(messageEl);
-    // Show typing indicator for new messages
-    typingIndicator.classList.add("visible");
-    console.log("Typing indicator shown");
-    updateNullStateVisibility();
-  }
+//   // Find or create message element
+//   let messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+//   if (!messageEl) {
+//     console.log("Creating new message element");
+//     messageEl = createMessageElement(messageId);
+//     chatHistory.appendChild(messageEl);
+//     // Show typing indicator for new messages
+//     typingIndicator.classList.add("visible");
+//     console.log("Typing indicator shown");
+//     updateNullStateVisibility();
+//   }
 
-  // Update content
-  const contentWrapper = messageEl.querySelector(".message-content");
-  if (contentWrapper) {
-    if (content && typeof content === "string") {
-      contentWrapper.innerHTML = marked.parse(content);
-    } else {
-      contentWrapper.innerHTML = ""; // Clear content if it's null/undefined or not a string
-    }
-    messageEl.style.display = "block"; // Show when content is added
-    scrollToBottom();
-  }
+//   // Update content
+//   const contentWrapper = messageEl.querySelector(".message-content");
+//   if (contentWrapper) {
+//     if (content && typeof content === "string") {
+//       contentWrapper.innerHTML = marked.parse(content);
+//     } else {
+//       contentWrapper.innerHTML = ""; // Clear content if it's null/undefined or not a string
+//     }
+//     messageEl.style.display = "block"; // Show when content is added
+//     scrollToBottom();
+//   }
 
-  // Handle completion
-  if (isComplete) {
-    console.log("Message complete, hiding typing indicator");
-    typingIndicator.classList.remove("visible");
+//   // Handle completion
+//   if (isComplete) {
+//     console.log("Message complete, hiding typing indicator");
+//     typingIndicator.classList.remove("visible");
 
-    // Update the message in the messages array
-    const messageIndex = messages.findIndex((m) => m.messageId === messageId);
-    if (messageIndex !== -1) {
-      messages[messageIndex].content = content;
-      messages[messageIndex].status = "completed";
-    }
-  }
-}
+//     // Update the message in the messages array
+//     const messageIndex = messages.findIndex((m) => m.messageId === messageId);
+//     if (messageIndex !== -1) {
+//       messages[messageIndex].content = content;
+//       messages[messageIndex].status = "completed";
+//     }
+//   }
+// }
 
 // Create message element
 function createMessageElement(messageId) {
@@ -151,63 +202,97 @@ function addErrorMessage(message) {
 }
 
 // Add screenshot to chat
+// async function addScreenshotToChat(data) {
+//   const message = {
+//     type: "screenshot",
+//     timestamp: Date.now(),
+//     filePath: data.filePath,
+//   };
+
+//   messages.push(message);
+
+//   const messageEl = document.createElement("div");
+//   messageEl.className = "message user";
+//   const img = document.createElement("img");
+//   img.src = `file://${data.filePath}`;
+//   img.className = "screenshot-thumbnail";
+//   img.alt = "Screenshot";
+//   img.addEventListener("click", () => window.electronAPI.openFile(data.filePath));
+//   messageEl.appendChild(img);
+//   chatHistory.appendChild(messageEl);
+//   scrollToBottom();
+
+//   try {
+//     typingIndicator.classList.add("visible");
+
+//     // Add a placeholder for the assistant's response
+//     currentMessageId = Date.now().toString();
+//     const assistantMessage = {
+//       type: "assistant",
+//       timestamp: Date.now(),
+//       messageId: currentMessageId,
+//       content: "",
+//       status: "pending",
+//     };
+//     messages.push(assistantMessage);
+
+//     const assistantMessageEl = createMessageElement(currentMessageId);
+//     chatHistory.appendChild(assistantMessageEl);
+//     scrollToBottom();
+
+//     // The main process will now handle the response via the onLLMResponse listener
+//     // The main process will handle the response
+//     await window.electronAPI.testResponse(prompt);
+//   } catch (error) {
+//     typingIndicator.classList.remove("visible");
+//     addErrorMessage(error.message);
+//   }
+// }
+
 async function addScreenshotToChat(data) {
-  const message = {
-    type: "screenshot",
-    timestamp: Date.now(),
-    filePath: data.filePath,
-  };
-
-  messages.push(message);
-
+  // This part that displays the image is correct and stays the same
   const messageEl = document.createElement("div");
   messageEl.className = "message user";
-
   const img = document.createElement("img");
   img.src = `file://${data.filePath}`;
   img.className = "screenshot-thumbnail";
   img.alt = "Screenshot";
-  img.addEventListener("click", () =>
-    window.electronAPI.openFile(data.filePath)
-  );
-
+  img.addEventListener("click", () => window.electronAPI.openFile(data.filePath));
   messageEl.appendChild(img);
   chatHistory.appendChild(messageEl);
   scrollToBottom();
 
-  try {
-    // Show typing indicator before analyzing screenshot
-    typingIndicator.classList.add("visible");
-    console.log("Showing typing indicator for screenshot analysis");
+  // Show typing indicator
+  typingIndicator.classList.add("visible");
 
-    const result = await window.electronAPI.analyzeScreenshot({
-      filePath: data.filePath,
-      history: messages
-        .filter((m) => m.type === "assistant")
-        .map((m) => ({
-          role: "assistant",
-          content: m.content,
-        })),
-    });
+  // Add a placeholder for the assistant's response
+  currentMessageId = Date.now().toString();
+  const assistantMessage = {
+    type: "assistant",
+    timestamp: Date.now(),
+    messageId: currentMessageId,
+    content: "",
+    status: "pending",
+  };
+  messages.push(assistantMessage);
 
-    if (!result.success) {
-      throw new Error(result.error);
-    }
+  const assistantMessageEl = createMessageElement(currentMessageId);
+  chatHistory.appendChild(assistantMessageEl);
+  scrollToBottom();
 
-    messages.push({
-      type: "assistant",
-      timestamp: Date.now(),
-      messageId: result.messageId,
-      provider: result.provider,
-      model: result.model,
-      content: "",
-      status: "pending",
-    });
-  } catch (error) {
+  const result = await window.electronAPI.analyzeScreenshot({
+    filePath: data.filePath,
+  });
+
+  if (!result.success) {
     typingIndicator.classList.remove("visible");
-    addErrorMessage(error.message);
+    addErrorMessage(result.error);
+    if (assistantMessageEl) {
+      assistantMessageEl.remove();
+    }
   }
 }
+
 
 // Reset chat
 function resetChat() {
@@ -239,22 +324,21 @@ async function handleTestResponse(prompt) {
     userMessageEl.textContent = prompt;
     chatHistory.appendChild(userMessageEl);
 
-    // Show typing indicator
     typingIndicator.classList.add("visible");
     console.log("Showing typing indicator for new test response");
 
     // Add assistant message placeholder
-    const messageId = Date.now().toString();
+    currentMessageId = Date.now().toString();
     const assistantMessage = {
       type: "assistant",
       timestamp: Date.now(),
-      messageId,
+      messageId: currentMessageId,
       content: "",
       status: "pending",
     };
     messages.push(assistantMessage);
 
-    const assistantMessageEl = createMessageElement(messageId);
+    const assistantMessageEl = createMessageElement(currentMessageId);
     chatHistory.appendChild(assistantMessageEl);
     scrollToBottom();
 

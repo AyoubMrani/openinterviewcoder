@@ -1,7 +1,13 @@
 const axios = require("axios");
 const { ipcMain } = require("electron");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 const config = require("./config");
+
+// Use a model that supports multimodal inputs (text and image)
+const MODEL_NAME = "gemini-2.5-flash";
+let genAI;
+let generativeModel;
 
 // System prompt for the AI assistant
 const SYSTEM_PROMPT = `You are an invisible AI assistant that analyzes screenshots during meetings and presentations.
@@ -22,128 +28,103 @@ Guidelines:
 - During presentations, note key takeaways and action items
 
 Format your responses in sections:
-• Quick Summary (2-3 sentences)
-• Key Points (3-5 bullets)
-• Suggested Actions (if applicable)
-• Technical Notes (if code/data is present)`;
+â€¢ Quick Summary (2-3 sentences)
+â€¢ Key Points (3-5 bullets)
+â€¢ Suggested Actions (if applicable)
+â€¢ Technical Notes (if code/data is present)`;
 
 let isInitialized = false;
 
 // Initialize the LLM service
-async function initializeLLMService() {
-  const apiKey = config.getOpenAIKey();
-  if (!apiKey) return;
+function initializeGemini() {
+  const apiKey = config.getGeminiKey();
+  if (!apiKey) {
+    console.log("Gemini API key not configured.");
+    return false;
+  }
+  genAI = new GoogleGenerativeAI(apiKey);
+  generativeModel = genAI.getGenerativeModel({
+    model: MODEL_NAME,
+    systemInstruction: SYSTEM_PROMPT,
+  });
+  return true;
+}
 
-  if (!isInitialized) {
-    ipcMain.handle("analyze-screenshot", async (event, data) => {
-      try {
-        return await makeLLMRequest(event, data);
-      } catch (error) {
-        throw new Error(`Failed to analyze screenshot: ${error.message}`);
-      }
-    });
-
-    ipcMain.handle("test-response", async (event, prompt) => {
-      try {
-        return await makeLLMRequest(event, { prompt });
-      } catch (error) {
-        throw new Error(`Failed to test response: ${error.message}`);
-      }
-    });
-
-    isInitialized = true;
+async function getModelInfo() {
+  if (!initializeGemini()) {
+    throw new Error("Gemini not initialized. API key may be missing.");
+  }
+  try {
+    const modelInfo = await genAI.getGenerativeModel({ model: MODEL_NAME });
+    // Note: The Node.js library does not directly expose token limits in the same way.
+    // We will use a known default for gemini-1.5-flash, which is very large.
+    // The API response's usageMetadata is the reliable source for actual usage.
+    return {
+      // Gemini 1.5 Flash has a massive context window, often 1M tokens.
+      // Setting a practical limit for UI purposes might be better.
+      input_token_limit: 1048576,
+    };
+  } catch (error) {
+    console.error("Failed to get model info:", error);
+    throw new Error(`API Error: ${error.message}`);
   }
 }
 
-async function makeLLMRequest(event, data) {
-  const apiKey = config.getOpenAIKey();
-  if (!apiKey) {
-    throw new Error(
-      "OpenAI API key not configured. Please set your API key in the settings."
-    );
-  }
-
-  if (!apiKey.startsWith("sk-")) {
-    throw new Error(
-      "Invalid OpenAI API key format. API keys should start with 'sk-'"
-    );
-  }
-
-  const requestData = {
-    model: "gpt-4o-mini",
-    input: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text:
-              data.prompt || "Analyze this screenshot and provide insights.",
-          },
-        ],
-      },
-    ],
+// Function to convert a file to a GenerativePart object
+function fileToGenerativePart(path, mimeType) {
+  return {
+    inlineData: {
+      data: Buffer.from(fs.readFileSync(path)).toString("base64"),
+      mimeType,
+    },
   };
+}
 
-  if (data.filePath) {
-    if (!fs.existsSync(data.filePath)) {
+
+async function makeLLMRequest(prompt, filePath) {
+  if (!initializeGemini()) {
+    throw new Error(
+      "Gemini API key not configured. Please set your API key in the settings."
+    );
+  }
+
+  // +++ THIS IS THE CORRECTED LINE +++
+  // The prompt string is now correctly wrapped in an object.
+  const promptParts = [{ text: prompt }];
+
+  if (filePath) {
+    if (!fs.existsSync(filePath)) {
       throw new Error("Screenshot file not found");
     }
-    const imageBuffer = fs.readFileSync(data.filePath);
-    const base64Image = imageBuffer.toString("base64");
-    requestData.input[0].content.push({
-      type: "input_image",
-      image_url: `data:image/png;base64,${base64Image}`,
-    });
+    // Add the image part to our prompt
+    promptParts.push(fileToGenerativePart(filePath, "image/png"));
   }
 
   try {
-    const response = await axios({
-      method: "post",
-      url: "https://api.openai.com/v1/responses",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      data: requestData,
+    const result = await generativeModel.generateContent({
+      contents: [{ role: "user", parts: promptParts }],
     });
 
-    const content = response.data.output[0].content[0].text;
-    const messageId = Date.now().toString();
+    console.log("Full Gemini API Result:", JSON.stringify(result, null, 2));
 
-    event.sender.send("stream-update", {
-      messageId,
-      content,
-      isComplete: true,
-      status: "completed",
-    });
+    const response = result.response;
+    const content = response.text();
+    const usage = response.usageMetadata;
 
     return {
       success: true,
-      messageId,
-      provider: "openai",
-      model: "gpt-4o-mini",
-      status: "completed",
+      content,
+      tokensUsed: usage.totalTokens,
+      model: MODEL_NAME,
     };
   } catch (error) {
-    if (error.response) {
-      if (error.response.status === 401) {
-        throw new Error(
-          "Invalid API key. Please check your OpenAI API key in settings."
-        );
-      }
-      throw new Error(
-        `API Error: ${error.response.data.error?.message || error.message}`
-      );
-    } else if (error.request) {
-      throw new Error(
-        "No response received from OpenAI API. Please check your internet connection."
-      );
-    }
-    throw new Error(`Request Error: ${error.message}`);
+    console.error("Gemini API request failed:", error);
+    throw new Error(`API Request Error: ${error.message}`);
   }
 }
 
 module.exports = {
-  initializeLLMService,
+  initializeLLMService: initializeGemini,
+  getModelInfo,
+  makeLLMRequest,
 };
