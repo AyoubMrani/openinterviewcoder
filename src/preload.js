@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onTokenUsageUpdated: (callback) =>
     ipcRenderer.on("token-usage-updated", (event, value) => callback(value)),
 
+    restoreMouseIgnore: () => ipcRenderer.invoke("restore-mouse-ignore"),
+
 });
 
 // No need for additional electron context bridge since we're handling everything through electronAPI

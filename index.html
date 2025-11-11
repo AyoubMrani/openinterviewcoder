@@ -17,6 +17,7 @@
         <div id="token-progress-bar"></div>
       </div>
     </div>
+
     <!-- Chat area -->
     <div class="chat-container">
       <div id="null-state" class="null-state">
@@ -47,10 +48,6 @@
               <kbd>⌘</kbd> + <kbd>←/→/↑/↓</kbd>
               <span>Move window</span>
             </div>
-            <!-- <div class="shortcut-item">
-              <kbd>⌘</kbd> + <kbd>,</kbd>
-              <span>Open settings</span>
-            </div> -->
           </div>
         </div>
       </div>
@@ -59,7 +56,26 @@
         <span>Building solution...</span>
       </div>
     </div>
+
+    <!-- NEW: Question Input Overlay -->
+    <div id="question-overlay" class="question-overlay" style="display: none;">
+      <div class="question-container">
+        <div class="question-header">
+          <h3>Ask a question about this screenshot</h3>
+          <button id="cancel-question" class="cancel-btn">✕</button>
+        </div>
+        <div class="question-preview">
+          <img id="question-screenshot-preview" src="" alt="Screenshot preview" />
+        </div>
+        <textarea id="question-input" placeholder="What would you like to know about this screenshot?"
+          rows="3"></textarea>
+        <div class="question-actions">
+          <button id="submit-question" class="submit-btn">Submit</button>
+        </div>
+      </div>
+    </div>
   </div>
+
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

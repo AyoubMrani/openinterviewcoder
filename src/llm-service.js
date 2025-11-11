@@ -88,9 +88,8 @@ async function makeLLMRequest(prompt, filePath) {
     );
   }
 
-  // +++ THIS IS THE CORRECTED LINE +++
-  // The prompt string is now correctly wrapped in an object.
-  const promptParts = [{ text: prompt }];
+  // Use custom prompt or default
+  const promptParts = [{ text: prompt || "Analyze this screenshot and provide insights." }];
 
   if (filePath) {
     if (!fs.existsSync(filePath)) {
@@ -105,16 +104,34 @@ async function makeLLMRequest(prompt, filePath) {
       contents: [{ role: "user", parts: promptParts }],
     });
 
-    console.log("Full Gemini API Result:", JSON.stringify(result, null, 2));
-
     const response = result.response;
-    const content = response.text();
+    
+    // Get the text content properly
+    let content = "";
+    if (response.candidates && response.candidates[0]) {
+      const candidate = response.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        content = candidate.content.parts
+          .filter(part => part.text)
+          .map(part => part.text)
+          .join("\n");
+      }
+    }
+    
+    // Fallback to response.text() if the above doesn't work
+    if (!content) {
+      content = response.text();
+    }
+
     const usage = response.usageMetadata;
+
+    console.log("Gemini API Response Content:", content);
+    console.log("Token Usage:", usage);
 
     return {
       success: true,
       content,
-      tokensUsed: usage.totalTokens,
+      tokensUsed: usage ? usage.totalTokenCount : 0,
       model: MODEL_NAME,
     };
   } catch (error) {

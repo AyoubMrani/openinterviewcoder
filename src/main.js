@@ -111,8 +111,11 @@ ipcMain.handle("hide-window", () => {
 // +++ NEW IPC HANDLERS FOR GEMINI +++
 ipcMain.handle("analyze-screenshot", async (event, data) => {
   try {
+    // Use custom prompt if provided, otherwise use default
+    const prompt = data.prompt || "Analyze this screenshot and provide insights.";
+    
     const result = await makeLLMRequest(
-      "Analyze this screenshot and provide insights.",
+      prompt,
       data.filePath
     );
 
@@ -127,19 +130,23 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
         max: maxInputTokens,
       });
     }
-    // Return a plain, cloneable object on success
     return { success: true };
   } catch (error) {
-    // On failure, send an error message to the renderer
     event.sender.send("llm-response", {
       success: false,
       error: error.message,
     });
-    // And RETURN a plain, cloneable object as the rejection value
     return { success: false, error: error.message };
   }
 });
 
+ipcMain.handle("restore-mouse-ignore", () => {
+  if (invisibleWindow) {
+    invisibleWindow.setIgnoreMouseEvents(true);
+    invisibleWindow.webContents.isIgnoringMouseEvents = true;
+  }
+  return true;
+});
 
 ipcMain.handle("test-response", async (event, prompt) => {
   try {
@@ -349,6 +356,13 @@ function registerShortcuts() {
       const screenshotPath = await captureFullScreen(desktopCapturer, screen);
       if (screenshotPath) {
         console.log("Screenshot saved:", screenshotPath);
+        
+        // Enable mouse events so user can interact with question dialog
+        if (invisibleWindow) {
+          invisibleWindow.setIgnoreMouseEvents(false);
+          invisibleWindow.webContents.isIgnoringMouseEvents = false;
+        }
+        
         // Notify renderer about successful capture
         if (invisibleWindow) {
           invisibleWindow.webContents.send("screenshot-captured", {

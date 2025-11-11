@@ -7,7 +7,14 @@ const tokenProgressBar = document.getElementById("token-progress-bar");
 // Chat state
 let messages = [];
 let currentMessageId = null;
+// Debug flag
+const DEBUG = true;
 
+function debugLog(...args) {
+  if (DEBUG) {
+    console.log('[DEBUG]', ...args);
+  }
+}
 // Initialize marked with options
 if (typeof marked === "undefined") {
   console.error("marked library not loaded");
@@ -66,6 +73,28 @@ function setupEventListeners() {
       }
     }
   });
+  // Question input handlers
+  const submitQuestionBtn = document.getElementById("submit-question");
+  const cancelQuestionBtn = document.getElementById("cancel-question");
+  const questionInput = document.getElementById("question-input");
+
+  if (submitQuestionBtn) {
+    submitQuestionBtn.addEventListener("click", submitQuestion);
+  }
+
+  if (cancelQuestionBtn) {
+    cancelQuestionBtn.addEventListener("click", cancelQuestion);
+  }
+
+  if (questionInput) {
+    // Submit on Enter (but allow Shift+Enter for new lines)
+    questionInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitQuestion();
+      }
+    });
+  }
 }
 
 function updateTokenDisplay(current, max) {
@@ -77,7 +106,11 @@ function updateTokenDisplay(current, max) {
 }
 
 function handleLLMResponse(data) {
-    console.log("LLM Response received by UI:", data);
+  debugLog("LLM Response received:", data);
+  debugLog("Current message ID:", currentMessageId);
+  debugLog("Chat history element:", chatHistory);
+
+  console.log("LLM Response received by UI:", data);
   typingIndicator.classList.remove("visible"); // Hide typing indicator
 
   if (!data.success) {
@@ -89,8 +122,37 @@ function handleLLMResponse(data) {
   let messageEl = document.querySelector(`[data-message-id="${currentMessageId}"]`);
   if (messageEl) {
     const contentWrapper = messageEl.querySelector(".message-content");
-    contentWrapper.innerHTML = marked.parse(data.content);
-    scrollToBottom();
+    if (contentWrapper) {
+      // Make sure marked is available
+      if (typeof marked !== 'undefined' && marked.parse) {
+        contentWrapper.innerHTML = marked.parse(data.content);
+      } else {
+        // Fallback if marked is not available
+        contentWrapper.textContent = data.content;
+      }
+
+      // Ensure the message is visible
+      messageEl.style.display = "block";
+      messageEl.style.opacity = "1";
+
+      scrollToBottom();
+    }
+  } else {
+    console.error("Message element not found for ID:", currentMessageId);
+    // Create it if it doesn't exist
+    messageEl = createMessageElement(currentMessageId);
+    chatHistory.appendChild(messageEl);
+    const contentWrapper = messageEl.querySelector(".message-content");
+    if (contentWrapper) {
+      if (typeof marked !== 'undefined' && marked.parse) {
+        contentWrapper.innerHTML = marked.parse(data.content);
+      } else {
+        contentWrapper.textContent = data.content;
+      }
+      messageEl.style.display = "block";
+      messageEl.style.opacity = "1";
+      scrollToBottom();
+    }
   }
 
   // Update the message in the state array
@@ -131,59 +193,13 @@ function scrollToBottom() {
   }
 }
 
-// Update message
-// function updateMessage(data) {
-//   const { messageId, content, isComplete } = data;
-//   console.log("updateMessage called:", {
-//     messageId,
-//     contentLength: content.length,
-//     isComplete,
-//   });
-
-//   // Find or create message element
-//   let messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-//   if (!messageEl) {
-//     console.log("Creating new message element");
-//     messageEl = createMessageElement(messageId);
-//     chatHistory.appendChild(messageEl);
-//     // Show typing indicator for new messages
-//     typingIndicator.classList.add("visible");
-//     console.log("Typing indicator shown");
-//     updateNullStateVisibility();
-//   }
-
-//   // Update content
-//   const contentWrapper = messageEl.querySelector(".message-content");
-//   if (contentWrapper) {
-//     if (content && typeof content === "string") {
-//       contentWrapper.innerHTML = marked.parse(content);
-//     } else {
-//       contentWrapper.innerHTML = ""; // Clear content if it's null/undefined or not a string
-//     }
-//     messageEl.style.display = "block"; // Show when content is added
-//     scrollToBottom();
-//   }
-
-//   // Handle completion
-//   if (isComplete) {
-//     console.log("Message complete, hiding typing indicator");
-//     typingIndicator.classList.remove("visible");
-
-//     // Update the message in the messages array
-//     const messageIndex = messages.findIndex((m) => m.messageId === messageId);
-//     if (messageIndex !== -1) {
-//       messages[messageIndex].content = content;
-//       messages[messageIndex].status = "completed";
-//     }
-//   }
-// }
-
 // Create message element
 function createMessageElement(messageId) {
   const messageEl = document.createElement("div");
   messageEl.className = "message assistant";
   messageEl.setAttribute("data-message-id", messageId);
-  messageEl.style.display = "none"; // Hide initially
+  // CHANGED: Make it visible immediately
+  messageEl.style.display = "block";
 
   const contentWrapper = document.createElement("div");
   contentWrapper.className = "message-content markdown-body";
@@ -201,66 +217,69 @@ function addErrorMessage(message) {
   scrollToBottom();
 }
 
-// Add screenshot to chat
-// async function addScreenshotToChat(data) {
-//   const message = {
-//     type: "screenshot",
-//     timestamp: Date.now(),
-//     filePath: data.filePath,
-//   };
-
-//   messages.push(message);
-
-//   const messageEl = document.createElement("div");
-//   messageEl.className = "message user";
-//   const img = document.createElement("img");
-//   img.src = `file://${data.filePath}`;
-//   img.className = "screenshot-thumbnail";
-//   img.alt = "Screenshot";
-//   img.addEventListener("click", () => window.electronAPI.openFile(data.filePath));
-//   messageEl.appendChild(img);
-//   chatHistory.appendChild(messageEl);
-//   scrollToBottom();
-
-//   try {
-//     typingIndicator.classList.add("visible");
-
-//     // Add a placeholder for the assistant's response
-//     currentMessageId = Date.now().toString();
-//     const assistantMessage = {
-//       type: "assistant",
-//       timestamp: Date.now(),
-//       messageId: currentMessageId,
-//       content: "",
-//       status: "pending",
-//     };
-//     messages.push(assistantMessage);
-
-//     const assistantMessageEl = createMessageElement(currentMessageId);
-//     chatHistory.appendChild(assistantMessageEl);
-//     scrollToBottom();
-
-//     // The main process will now handle the response via the onLLMResponse listener
-//     // The main process will handle the response
-//     await window.electronAPI.testResponse(prompt);
-//   } catch (error) {
-//     typingIndicator.classList.remove("visible");
-//     addErrorMessage(error.message);
-//   }
-// }
+let currentScreenshotPath = null;
 
 async function addScreenshotToChat(data) {
-  // This part that displays the image is correct and stays the same
+  // Store the screenshot path
+  currentScreenshotPath = data.filePath;
+
+  // Show the question overlay
+  const overlay = document.getElementById("question-overlay");
+  const preview = document.getElementById("question-screenshot-preview");
+  const input = document.getElementById("question-input");
+
+  if (overlay && preview && input) {
+    preview.src = `file://${data.filePath}`;
+    input.value = "";
+    overlay.style.display = "flex";
+
+    // Focus on input after a brief delay
+    setTimeout(() => input.focus(), 100);
+  }
+}
+
+async function submitQuestion() {
+  const input = document.getElementById("question-input");
+  const overlay = document.getElementById("question-overlay");
+  const submitBtn = document.getElementById("submit-question");
+
+  if (!input || !overlay) return;
+
+  const question = input.value.trim();
+
+  // If no question, use default prompt
+  const prompt = question || "Analyze this screenshot and provide insights.";
+
+  // Hide overlay
+  overlay.style.display = "none";
+
+  // Restore mouse ignore state after submitting
+  await window.electronAPI.restoreMouseIgnore();
+
+  // Add screenshot to chat history
   const messageEl = document.createElement("div");
   messageEl.className = "message user";
   const img = document.createElement("img");
-  img.src = `file://${data.filePath}`;
+  img.src = `file://${currentScreenshotPath}`;
   img.className = "screenshot-thumbnail";
   img.alt = "Screenshot";
-  img.addEventListener("click", () => window.electronAPI.openFile(data.filePath));
+  img.addEventListener("click", () => window.electronAPI.openFile(currentScreenshotPath));
   messageEl.appendChild(img);
+
+  // If user asked a question, show it
+  if (question) {
+    const questionText = document.createElement("div");
+    questionText.style.marginTop = "8px";
+    questionText.style.fontSize = "14px";
+    questionText.textContent = question;
+    messageEl.appendChild(questionText);
+  }
+
   chatHistory.appendChild(messageEl);
   scrollToBottom();
+
+  // ADD THIS LINE:
+  updateNullStateVisibility();
 
   // Show typing indicator
   typingIndicator.classList.add("visible");
@@ -280,17 +299,37 @@ async function addScreenshotToChat(data) {
   chatHistory.appendChild(assistantMessageEl);
   scrollToBottom();
 
-  const result = await window.electronAPI.analyzeScreenshot({
-    filePath: data.filePath,
-  });
+  try {
+    const result = await window.electronAPI.analyzeScreenshot({
+      filePath: currentScreenshotPath,
+      prompt: prompt,
+    });
 
-  if (!result.success) {
+    if (!result.success) {
+      typingIndicator.classList.remove("visible");
+      addErrorMessage(result.error);
+      if (assistantMessageEl) {
+        assistantMessageEl.remove();
+      }
+    }
+  } catch (error) {
     typingIndicator.classList.remove("visible");
-    addErrorMessage(result.error);
+    addErrorMessage(error.message);
     if (assistantMessageEl) {
       assistantMessageEl.remove();
     }
   }
+
+  // Clear the stored path
+  currentScreenshotPath = null;
+}
+
+function cancelQuestion() {
+  const overlay = document.getElementById("question-overlay");
+  if (overlay) {
+    overlay.style.display = "none";
+  }
+  currentScreenshotPath = null;
 }
 
 
@@ -303,8 +342,12 @@ function resetChat() {
 
 function updateNullStateVisibility() {
   const nullState = document.getElementById("null-state");
-  if (nullState) {
-    nullState.style.display = messages.length === 0 ? "flex" : "none";
+  const chatHistory = document.getElementById("chat-history");
+
+  if (nullState && chatHistory) {
+    // Hide null state if there are any messages
+    const hasMessages = chatHistory.children.length > 0;
+    nullState.style.display = hasMessages ? "none" : "flex";
   }
 }
 
@@ -340,6 +383,8 @@ async function handleTestResponse(prompt) {
 
     const assistantMessageEl = createMessageElement(currentMessageId);
     chatHistory.appendChild(assistantMessageEl);
+    debugLog("Created assistant message element:", assistantMessageEl);
+    debugLog("Message ID:", currentMessageId);
     scrollToBottom();
 
     const result = await window.electronAPI.testResponse(prompt);
