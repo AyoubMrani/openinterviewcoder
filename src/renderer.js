@@ -95,6 +95,33 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Text question handlers
+  const submitTextQuestionBtn = document.getElementById("submit-text-question");
+  const cancelTextQuestionBtn = document.getElementById("cancel-text-question");
+  const textQuestionInput = document.getElementById("text-question-input");
+
+  if (submitTextQuestionBtn) {
+    submitTextQuestionBtn.addEventListener("click", submitTextQuestion);
+  }
+
+  if (cancelTextQuestionBtn) {
+    cancelTextQuestionBtn.addEventListener("click", cancelTextQuestion);
+  }
+
+  if (textQuestionInput) {
+    // Submit on Ctrl/Cmd+Enter
+    textQuestionInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        submitTextQuestion();
+      }
+    });
+  }
+
+  // Listen for text question show event
+  window.electronAPI.onShowTextQuestion(showTextQuestion);
+
 }
 
 function updateTokenDisplay(current, max) {
@@ -330,6 +357,104 @@ function cancelQuestion() {
     overlay.style.display = "none";
   }
   currentScreenshotPath = null;
+}
+
+// ADD THESE NEW FUNCTIONS HERE:
+function showTextQuestion() {
+  const overlay = document.getElementById("text-question-overlay");
+  const input = document.getElementById("text-question-input");
+
+  if (overlay && input) {
+    input.value = "";
+    overlay.style.display = "flex";
+
+    // Focus on input after a brief delay
+    setTimeout(() => input.focus(), 100);
+  }
+}
+
+async function submitTextQuestion() {
+  const input = document.getElementById("text-question-input");
+  const overlay = document.getElementById("text-question-overlay");
+
+  if (!input || !overlay) return;
+
+  const question = input.value.trim();
+
+  if (!question) {
+    alert("Please enter a question!");
+    return;
+  }
+
+  // Hide overlay
+  overlay.style.display = "none";
+
+  // Restore mouse ignore state after submitting
+  await window.electronAPI.restoreMouseIgnore();
+
+  // Add user message to chat
+  const userMessage = {
+    type: "user",
+    timestamp: Date.now(),
+    content: question,
+  };
+  messages.push(userMessage);
+
+  const userMessageEl = document.createElement("div");
+  userMessageEl.className = "message user";
+  userMessageEl.textContent = question;
+  chatHistory.appendChild(userMessageEl);
+  scrollToBottom();
+  updateNullStateVisibility();
+
+  // Show typing indicator
+  typingIndicator.classList.add("visible");
+
+  // Add a placeholder for the assistant's response
+  currentMessageId = Date.now().toString();
+  const assistantMessage = {
+    type: "assistant",
+    timestamp: Date.now(),
+    messageId: currentMessageId,
+    content: "",
+    status: "pending",
+  };
+  messages.push(assistantMessage);
+
+  const assistantMessageEl = createMessageElement(currentMessageId);
+  chatHistory.appendChild(assistantMessageEl);
+  debugLog("Created assistant message element:", assistantMessageEl);
+  debugLog("Message ID:", currentMessageId);
+  scrollToBottom();
+
+  try {
+    // Use testResponse since there's no screenshot
+    const result = await window.electronAPI.testResponse(question);
+
+    if (!result.success) {
+      typingIndicator.classList.remove("visible");
+      addErrorMessage(result.error);
+      if (assistantMessageEl) {
+        assistantMessageEl.remove();
+      }
+    }
+  } catch (error) {
+    typingIndicator.classList.remove("visible");
+    addErrorMessage(error.message);
+    if (assistantMessageEl) {
+      assistantMessageEl.remove();
+    }
+  }
+}
+
+async function cancelTextQuestion() {
+  const overlay = document.getElementById("text-question-overlay");
+  if (overlay) {
+    overlay.style.display = "none";
+  }
+
+  // Restore mouse ignore state when canceling
+  await window.electronAPI.restoreMouseIgnore();
 }
 
 

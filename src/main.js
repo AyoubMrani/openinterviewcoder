@@ -113,7 +113,7 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
   try {
     // Use custom prompt if provided, otherwise use default
     const prompt = data.prompt || "Analyze this screenshot and provide insights.";
-    
+
     const result = await makeLLMRequest(
       prompt,
       data.filePath
@@ -356,13 +356,13 @@ function registerShortcuts() {
       const screenshotPath = await captureFullScreen(desktopCapturer, screen);
       if (screenshotPath) {
         console.log("Screenshot saved:", screenshotPath);
-        
+
         // Enable mouse events so user can interact with question dialog
         if (invisibleWindow) {
           invisibleWindow.setIgnoreMouseEvents(false);
           invisibleWindow.webContents.isIgnoringMouseEvents = false;
         }
-        
+
         // Notify renderer about successful capture
         if (invisibleWindow) {
           invisibleWindow.webContents.send("screenshot-captured", {
@@ -407,6 +407,19 @@ function registerShortcuts() {
       }
     }
   });
+
+  // Text question shortcut (Command/Ctrl + Shift + C)
+  globalShortcut.register("CommandOrControl+Shift+C", () => {
+    if (invisibleWindow) {
+      // Enable mouse events so user can interact with input dialog
+      invisibleWindow.setIgnoreMouseEvents(false);
+      invisibleWindow.webContents.isIgnoringMouseEvents = false;
+
+      // Show the text question overlay
+      invisibleWindow.webContents.send("show-text-question");
+    }
+  });
+
 
   // Window movement shortcuts
   const NUDGE_AMOUNT = 50;

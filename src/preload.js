@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onResetChat: (callback) =>
     ipcRenderer.on("reset-chat", (event) => callback()),
 
+  // Text question
+  onShowTextQuestion: (callback) =>
+    ipcRenderer.on("show-text-question", (event) => callback()),
+
   // Window position
   onWindowPositionChanged: (callback) =>
     ipcRenderer.on("window-position-changed", (event, value) =>
@@ -58,7 +62,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onTokenUsageUpdated: (callback) =>
     ipcRenderer.on("token-usage-updated", (event, value) => callback(value)),
 
-    restoreMouseIgnore: () => ipcRenderer.invoke("restore-mouse-ignore"),
+  restoreMouseIgnore: () => ipcRenderer.invoke("restore-mouse-ignore"),
 
 });
 

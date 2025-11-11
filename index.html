@@ -29,6 +29,14 @@
           <h4>Open Interview Coder</h4>
           <div class="shortcuts">
             <div class="shortcut-item">
+              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>C</kbd>
+              <span>Ask a question</span>
+            </div>
+            <div class="shortcut-item">
+              <kbd>⌘</kbd> + <kbd>←/→/↑/↓</kbd>
+              <span>Move window</span>
+            </div>
+            <div class="shortcut-item">
               <kbd>⌘</kbd> + <kbd>H</kbd>
               <span>Take a screenshot</span>
             </div>
@@ -71,6 +79,20 @@
           rows="3"></textarea>
         <div class="question-actions">
           <button id="submit-question" class="submit-btn">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW: Text-Only Question Overlay -->
+    <div id="text-question-overlay" class="question-overlay" style="display: none;">
+      <div class="question-container">
+        <div class="question-header">
+          <h3>Ask me anything</h3>
+          <button id="cancel-text-question" class="cancel-btn">✕</button>
+        </div>
+        <textarea id="text-question-input" placeholder="Type your question here..." rows="5"></textarea>
+        <div class="question-actions">
+          <button id="submit-text-question" class="submit-btn">Submit</button>
         </div>
       </div>
     </div>
