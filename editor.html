@@ -1,219 +1,236 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:;" />
-  <title>Edit Screenshot</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:;" />
+    <title>Edit Screenshot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-    body, html {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #1a1a1a;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      -webkit-app-region: drag;
-    }
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-app-region: drag;
+        }
 
-    #editor-container {
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      height: 100%;
-    }
+        #editor-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
 
-    #toolbar {
-      background: #2a2a2a;
-      padding: 12px;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      border-bottom: 1px solid #3a3a3a;
-      -webkit-app-region: no-drag;
-    }
+        #toolbar {
+            background: #2a2a2a;
+            padding: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            border-bottom: 1px solid #3a3a3a;
+            -webkit-app-region: no-drag;
+        }
 
-    .tool-group {
-      display: flex;
-      gap: 4px;
-      padding: 0 8px;
-      border-right: 1px solid #3a3a3a;
-    }
+        .tool-group {
+            display: flex;
+            gap: 4px;
+            padding: 0 8px;
+            border-right: 1px solid #3a3a3a;
+        }
 
-    .tool-group:last-child {
-      border-right: none;
-      margin-left: auto;
-    }
+        .tool-group:last-child {
+            border-right: none;
+            margin-left: auto;
+        }
 
-    .tool-btn {
-      background: #3a3a3a;
-      border: 2px solid transparent;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+        .tool-btn {
+            background: #3a3a3a;
+            border: 2px solid transparent;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
 
-    .tool-btn:hover {
-      background: #4a4a4a;
-    }
+        .tool-btn:hover {
+            background: #4a4a4a;
+        }
 
-    .tool-btn.active {
-      background: #007aff;
-      border-color: #0056b3;
-    }
+        .tool-btn.active {
+            background: #007aff;
+            border-color: #0056b3;
+        }
 
-    .color-picker {
-      width: 40px;
-      height: 36px;
-      border: 2px solid #3a3a3a;
-      border-radius: 6px;
-      cursor: pointer;
-      background: #ff0000;
-    }
+        .color-picker {
+            width: 40px;
+            height: 36px;
+            border: 2px solid #3a3a3a;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #ff0000;
+        }
 
-    .size-slider {
-      width: 100px;
-    }
+        .size-slider {
+            width: 100px;
+        }
 
-    .size-label {
-      color: #999;
-      font-size: 12px;
-      margin-left: 8px;
-    }
+        .size-label {
+            color: #999;
+            font-size: 12px;
+            margin-left: 8px;
+        }
 
-    #canvas-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: auto;
-      background: #1a1a1a;
-      position: relative;
-      -webkit-app-region: no-drag;
-    }
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            background: #1a1a1a;
+            position: relative;
+            -webkit-app-region: no-drag;
+        }
 
-    #canvas {
-      max-width: 100%;
-      max-height: 100%;
-      cursor: crosshair;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    }
+        #canvas {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
 
-    #canvas.pen-cursor {
-      cursor: crosshair;
-    }
+        #canvas.pen-cursor {
+            cursor: crosshair;
+        }
 
-    #canvas.eraser-cursor {
-      cursor: cell;
-    }
+        #canvas.eraser-cursor {
+            cursor: cell;
+        }
 
-    #canvas.text-cursor {
-      cursor: text;
-    }
+        #canvas.text-cursor {
+            cursor: text;
+        }
 
-    .action-btn {
-      background: #007aff;
-      color: white;
-      padding: 8px 20px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-    }
+        .action-btn {
+            background: #007aff;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
 
-    .action-btn:hover {
-      background: #0056b3;
-    }
+        .action-btn:hover {
+            background: #0056b3;
+        }
 
-    .cancel-btn {
-      background: #666;
-    }
+        .cancel-btn {
+            background: #666;
+        }
 
-    .cancel-btn:hover {
-      background: #555;
-    }
+        .cancel-btn:hover {
+            background: #555;
+        }
 
-    #text-input {
-      position: absolute;
-      background: white;
-      border: 2px solid #007aff;
-      padding: 4px 8px;
-      font-size: 16px;
-      outline: none;
-      display: none;
-      z-index: 100;
-    }
-  </style>
+        #text-input {
+            position: absolute;
+            background: white;
+            border: 2px solid #007aff;
+            padding: 4px 8px;
+            font-size: 16px;
+            outline: none;
+            display: none;
+            z-index: 100;
+        }
+
+        #canvas.select-cursor {
+            cursor: pointer;
+        }
+
+        #preview-canvas {
+            position: absolute;
+            pointer-events: none;
+        }
+    </style>
 </head>
+
 <body>
-  <div id="editor-container">
-    <div id="toolbar">
-      <div class="tool-group">
-        <button class="tool-btn active" data-tool="pen" title="Draw">
-          ✏️ Pen
-        </button>
-        <button class="tool-btn" data-tool="highlighter" title="Highlight">
-          🖍️ Highlight
-        </button>
-        <button class="tool-btn" data-tool="eraser" title="Erase">
-          🧹 Eraser
-        </button>
-      </div>
+    <div id="editor-container">
+        <div id="toolbar">
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="select" title="Select">
+                    👆 Select
+                </button>
+                <button class="tool-btn active" data-tool="pen" title="Draw">
+                    ✏️ Pen
+                </button>
+                <button class="tool-btn" data-tool="highlighter" title="Highlight">
+                    🖍️ Highlight
+                </button>
+                <button class="tool-btn" data-tool="eraser" title="Erase">
+                    🧹 Eraser
+                </button>
 
-      <div class="tool-group">
-        <button class="tool-btn" data-tool="rectangle" title="Rectangle">
-          ⬜ Box
-        </button>
-        <button class="tool-btn" data-tool="circle" title="Circle">
-          ⭕ Circle
-        </button>
-        <button class="tool-btn" data-tool="arrow" title="Arrow">
-          ➡️ Arrow
-        </button>
-        <button class="tool-btn" data-tool="text" title="Text">
-          🔤 Text
-        </button>
-      </div>
+            </div>
 
-      <div class="tool-group">
-        <input type="color" id="color-picker" class="color-picker" value="#ff0000" title="Color">
-        <input type="range" id="size-slider" class="size-slider" min="1" max="20" value="3" title="Size">
-        <span class="size-label" id="size-label">3px</span>
-      </div>
+            <div class="tool-group">
+                <button class="tool-btn" data-tool="rectangle" title="Rectangle">
+                    ⬜ Box
+                </button>
+                <button class="tool-btn" data-tool="circle" title="Circle">
+                    ⭕ Circle
+                </button>
+                <button class="tool-btn" data-tool="arrow" title="Arrow">
+                    ➡️ Arrow
+                </button>
+                <button class="tool-btn" data-tool="text" title="Text">
+                    🔤 Text
+                </button>
+            </div>
 
-      <div class="tool-group">
-        <button class="tool-btn" id="undo-btn" title="Undo">
-          ↶ Undo
-        </button>
-        <button class="tool-btn" id="clear-btn" title="Clear all">
-          🗑️ Clear
-        </button>
-      </div>
+            <div class="tool-group">
+                <input type="color" id="color-picker" class="color-picker" value="#ff0000" title="Color">
+                <input type="range" id="size-slider" class="size-slider" min="1" max="20" value="3" title="Size">
+                <span class="size-label" id="size-label">3px</span>
+            </div>
 
-      <div class="tool-group">
-        <button class="action-btn cancel-btn" id="cancel-btn">Cancel</button>
-        <button class="action-btn" id="done-btn">Done</button>
-      </div>
+            <div class="tool-group">
+                <button class="tool-btn" id="undo-btn" title="Undo">
+                    ↶ Undo
+                </button>
+                <button class="tool-btn" id="clear-btn" title="Clear all">
+                    🗑️ Clear
+                </button>
+            </div>
+
+            <div class="tool-group">
+                <button class="action-btn cancel-btn" id="cancel-btn">Cancel</button>
+                <button class="action-btn" id="done-btn">Done</button>
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+            <input type="text" id="text-input">
+        </div>
     </div>
 
-    <div id="canvas-container">
-      <canvas id="canvas"></canvas>
-      <input type="text" id="text-input">
-    </div>
-  </div>
-
-  <script src="src/editor.js"></script>
+    <script src="src/editor.js"></script>
 </body>
+
 </html>

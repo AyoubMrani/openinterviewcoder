@@ -9,6 +9,7 @@ const {
   Menu,
   Tray,
 } = require("electron");
+const fs = require("fs");
 app.disableHardwareAcceleration();
 const path = require("path");
 const {
