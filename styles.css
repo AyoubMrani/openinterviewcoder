@@ -669,3 +669,40 @@ body.full-mode #invisible-container {
   -webkit-backdrop-filter: blur(10px); /* Safari support */
 
 }
+
+.trading-doc-indicator {
+  position: absolute;
+  top: 40px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(76, 175, 80, 0.2);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: rgba(76, 175, 80, 1);
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
+.indicator-icon {
+  font-size: 14px;
+}
+
+.indicator-text {
+  font-weight: 500;
+}
+
+body.compact-mode .trading-doc-indicator {
+  top: 28px;
+  right: 12px;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+body.compact-mode .indicator-icon {
+  font-size: 12px;
+}

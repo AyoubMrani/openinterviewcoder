@@ -22,6 +22,9 @@ const {
   initializeLLMService,
   getModelInfo,
   makeLLMRequest,
+  loadTradingDocument,
+  clearTradingDocument,
+  getTradingDocumentStatus,
 } = require("./llm-service");
 const config = require("./config");
 
@@ -30,6 +33,81 @@ let maxInputTokens = 1048576; // Default, will be updated
 let isCompactMode = true; // Start in compact mode
 const COMPACT_SIZE = 400; // Square size (400x400)
 const COMPACT_MARGIN = 20; // Margin from screen edge
+
+// IPC handler to load trading document
+ipcMain.handle("load-trading-document", async (event, filePath) => {
+  try {
+    const success = loadTradingDocument(filePath);
+    if (success) {
+      // Notify renderer that document is loaded
+      if (invisibleWindow) {
+        invisibleWindow.webContents.send("trading-document-loaded", {
+          loaded: true,
+          path: filePath,
+        });
+      }
+      return { success: true, message: "Trading document loaded successfully" };
+    } else {
+      return { success: false, error: "Failed to load document" };
+    }
+  } catch (error) {
+    console.error("Error loading trading document:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handler to clear trading document
+ipcMain.handle("clear-trading-document", async () => {
+  try {
+    clearTradingDocument();
+    if (invisibleWindow) {
+      invisibleWindow.webContents.send("trading-document-loaded", {
+        loaded: false,
+      });
+    }
+    return { success: true };
+  } catch (error) {
+    console.error("Error clearing trading document:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handler to get document status
+ipcMain.handle("get-trading-document-status", () => {
+  return { loaded: getTradingDocumentStatus() };
+});
+
+// IPC handler to open file dialog for selecting trading document
+ipcMain.handle("select-trading-document", async () => {
+  const { dialog } = require("electron");
+  
+  const result = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    filters: [
+      { name: "Text Files", extensions: ["txt", "md"] },
+      { name: "All Files", extensions: ["*"] },
+    ],
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    const filePath = result.filePaths[0];
+    const loadResult = loadTradingDocument(filePath);
+    
+    if (loadResult) {
+      if (invisibleWindow) {
+        invisibleWindow.webContents.send("trading-document-loaded", {
+          loaded: true,
+          path: filePath,
+        });
+      }
+      return { success: true, path: filePath };
+    } else {
+      return { success: false, error: "Failed to load document" };
+    }
+  }
+
+  return { success: false, error: "No file selected" };
+});
 
 // IPC handlers for settings
 ipcMain.handle("get-settings", () => {
