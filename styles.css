@@ -524,7 +524,8 @@ kbd {
   object-fit: contain;
 }
 
-#question-input {
+#question-input, 
+#text-question-input {
   width: 100%;
   padding: 12px;
   background: rgba(255, 255, 255, 0.05);
@@ -538,13 +539,15 @@ kbd {
   pointer-events: all;
 }
 
-#question-input:focus {
+#question-input:focus, 
+#text-question-input:focus {
   outline: none;
   border-color: #007aff;
   background: rgba(255, 255, 255, 0.08);
 }
 
-#question-input::placeholder {
+#question-input::placeholder,
+#text-question-input::placeholder {
   color: rgba(255, 255, 255, 0.4);
 }
 
