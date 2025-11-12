@@ -27,6 +27,8 @@ if (typeof marked === "undefined") {
 
 // Initialize the UI
 document.addEventListener("DOMContentLoaded", async () => {
+  document.body.classList.add("compact-mode");
+
   setupEventListeners();
   try {
     const tokenInfo = await window.electronAPI.getTokenInfo();
@@ -122,7 +124,28 @@ function setupEventListeners() {
   // Listen for text question show event
   window.electronAPI.onShowTextQuestion(showTextQuestion);
 
+  // Listen for mode changes
+  window.electronAPI.onModeChanged(handleModeChange);
+
 }
+
+function handleModeChange(data) {
+  const body = document.body;
+
+  if (data.isCompact) {
+    body.classList.remove("full-mode");
+    body.classList.add("compact-mode");
+    debugLog("Switched to compact mode");
+  } else {
+    body.classList.remove("compact-mode");
+    body.classList.add("full-mode");
+    debugLog("Switched to full mode");
+  }
+
+  // Scroll to bottom after mode change
+  setTimeout(() => scrollToBottom(), 100);
+}
+
 
 function updateTokenDisplay(current, max) {
   if (!tokenProgressText || !tokenProgressBar) return;

@@ -23,10 +23,11 @@ const {
 } = require("./llm-service");
 const config = require("./config");
 
-// +++ ADD TOKEN TRACKING VARIABLES +++
 let sessionTotalTokens = 0;
 let maxInputTokens = 1048576; // Default, will be updated
-
+let isCompactMode = true; // Start in compact mode
+const COMPACT_SIZE = 400; // Square size (400x400)
+const COMPACT_MARGIN = 20; // Margin from screen edge
 
 // IPC handlers for settings
 ipcMain.handle("get-settings", () => {
@@ -241,6 +242,13 @@ function createMenuTemplate() {
 }
 
 function createInvisibleWindow() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+
+  // Calculate compact mode position (right side of screen)
+  const compactX = screenWidth - COMPACT_SIZE - COMPACT_MARGIN;
+  const compactY = COMPACT_MARGIN;
+
   invisibleWindow = new BrowserWindow({
     frame: false,
     transparent: true,
@@ -248,6 +256,11 @@ function createInvisibleWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     backgroundColor: "#00000000",
+    // Start in compact mode
+    x: compactX,
+    y: compactY,
+    width: COMPACT_SIZE,
+    height: COMPACT_SIZE,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -265,7 +278,7 @@ function createInvisibleWindow() {
   // Set content protection to prevent screen capture
   invisibleWindow.setContentProtection(true);
 
-  // Always ignore mouse events to prevent interaction with screen sharing
+  // Initially ignore mouse events
   invisibleWindow.setIgnoreMouseEvents(true);
   invisibleWindow.webContents.isIgnoringMouseEvents = true;
 
@@ -291,6 +304,44 @@ function createInvisibleWindow() {
 
   // Show window initially
   invisibleWindow.showInactive();
+
+  // Notify renderer about initial mode
+  invisibleWindow.webContents.once("did-finish-load", () => {
+    invisibleWindow.webContents.send("mode-changed", { isCompact: isCompactMode });
+  });
+}
+
+function toggleWindowMode() {
+  if (!invisibleWindow) return;
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+
+  isCompactMode = !isCompactMode;
+
+  if (isCompactMode) {
+    // Switch to compact mode - square at right side
+    const compactX = screenWidth - COMPACT_SIZE - COMPACT_MARGIN;
+    const compactY = COMPACT_MARGIN;
+
+    invisibleWindow.setBounds({
+      x: compactX,
+      y: compactY,
+      width: COMPACT_SIZE,
+      height: COMPACT_SIZE,
+    });
+  } else {
+    // Switch to full screen mode
+    invisibleWindow.setBounds({
+      x: 0,
+      y: 0,
+      width: screenWidth,
+      height: screenHeight,
+    });
+  }
+
+  // Notify renderer about mode change
+  invisibleWindow.webContents.send("mode-changed", { isCompact: isCompactMode });
 }
 
 function createSettingsWindow() {
@@ -418,6 +469,11 @@ function registerShortcuts() {
       // Show the text question overlay
       invisibleWindow.webContents.send("show-text-question");
     }
+  });
+
+  // Toggle window mode (Command/Ctrl + Space)
+  globalShortcut.register("CommandOrControl+Space", () => {
+    toggleWindowMode();
   });
 
 

@@ -29,6 +29,7 @@ html {
   margin: 0 auto;
   pointer-events: none;
   border-radius: 12px;
+  transition: background-color 0.3s ease; /* Smooth transition */
 }
 
 /* Chat container */
@@ -582,4 +583,89 @@ kbd {
 .submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Compact Mode Styles */
+body.compact-mode #invisible-container {
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    background-color: rgba(255, 255, 255, 0.08); /* Keep original transparency */
+}
+
+body.compact-mode .chat-container {
+  padding: 12px;
+  gap: 12px;
+}
+
+body.compact-mode .message {
+  font-size: 12px;
+  padding: 8px 12px;
+  max-width: 95%;
+}
+
+body.compact-mode .screenshot-thumbnail {
+  max-height: 120px;
+}
+
+body.compact-mode .null-state {
+  padding: 1rem;
+}
+
+body.compact-mode .null-state h4 {
+  font-size: 14px;
+  margin-bottom: 0.5rem;
+}
+
+body.compact-mode .octo-logo {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 0.25rem;
+}
+
+body.compact-mode .shortcuts {
+  gap: 0.25rem;
+  font-size: 10px;
+}
+
+body.compact-mode .shortcut-item {
+  padding: 0.15rem 0.5rem;
+  font-size: 10px;
+}
+
+body.compact-mode .shortcut-item kbd {
+  padding: 0.1rem 0.3rem;
+  font-size: 8px;
+}
+
+body.compact-mode #token-progress-container {
+  top: 8px;
+  right: 12px;
+  width: 140px;
+}
+
+body.compact-mode #token-progress-text {
+  font-size: 8px;
+}
+
+body.compact-mode .typing-indicator {
+  font-size: 11px;
+  padding: 6px 12px;
+}
+
+body.compact-mode .message-content.markdown-body code {
+  font-size: 11px;
+}
+
+body.compact-mode .message-content.markdown-body pre {
+  padding: 8px;
+  font-size: 11px;
+}
+
+/* Full Mode - default styles remain */
+body.full-mode #invisible-container {
+  border-radius: 12px;
+  background-color: rgba(30, 30, 30, 0.95); /* Almost completely opaque dark background */
+  backdrop-filter: blur(10px); /* Optional: adds blur effect for better readability */
+  -webkit-backdrop-filter: blur(10px); /* Safari support */
+
 }
