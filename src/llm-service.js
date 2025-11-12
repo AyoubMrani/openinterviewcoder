@@ -28,10 +28,10 @@ Guidelines:
 - During presentations, note key takeaways and action items
 
 Format your responses in sections:
-â€¢ Quick Summary (2-3 sentences)
-â€¢ Key Points (3-5 bullets)
-â€¢ Suggested Actions (if applicable)
-â€¢ Technical Notes (if code/data is present)`;
+• Quick Summary (2-3 sentences)
+• Key Points (3-5 bullets)
+• Suggested Actions (if applicable)
+• Technical Notes (if code/data is present)`;
 
 let isInitialized = false;
 

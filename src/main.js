@@ -14,6 +14,7 @@ const path = require("path");
 const {
   ensureScreenRecordingPermission,
   captureFullScreen,
+  captureAreaScreenshot,
   getRecentScreenshots,
 } = require("./screenshot");
 const {
@@ -148,6 +149,120 @@ ipcMain.handle("restore-mouse-ignore", () => {
   }
   return true;
 });
+
+// ADD THIS NEW HANDLER:
+ipcMain.handle("start-area-screenshot", async () => {
+  try {
+    // Hide the main window
+    if (invisibleWindow) {
+      invisibleWindow.hide();
+    }
+
+    // Wait for window to hide
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Check permission
+    const hasPermission = await ensureScreenRecordingPermission();
+    if (!hasPermission) {
+      console.log("Permission not granted. Skipping screenshot.");
+      if (invisibleWindow) {
+        invisibleWindow.showInactive();
+      }
+      return { success: false, error: "Permission denied" };
+    }
+
+    // Create selection window
+    createSelectionWindow();
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to start area screenshot:", error);
+    if (invisibleWindow) {
+      invisibleWindow.showInactive();
+    }
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("capture-area-screenshot", async (event, area) => {
+  try {
+    // Close the selection window first
+    if (selectionWindow) {
+      selectionWindow.close();
+      selectionWindow = null;
+    }
+
+    // Wait for selection window to close completely
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const screenshotPath = await captureAreaScreenshot(desktopCapturer, screen, area);
+
+    if (screenshotPath) {
+      console.log("Area screenshot saved:", screenshotPath);
+
+      // Show and enable mouse events for question dialog
+      if (invisibleWindow) {
+        invisibleWindow.show(); // Use show() instead of showInactive()
+        invisibleWindow.focus(); // Make sure it gets focus
+        invisibleWindow.setIgnoreMouseEvents(false);
+        invisibleWindow.webContents.isIgnoringMouseEvents = false;
+      }
+
+      // Small delay to ensure window is visible
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Notify renderer about successful capture
+      if (invisibleWindow) {
+        invisibleWindow.webContents.send("screenshot-captured", {
+          filePath: screenshotPath,
+          timestamp: Date.now(),
+        });
+      }
+
+      return { success: true, filePath: screenshotPath };
+    }
+
+    // If screenshot failed, restore window
+    if (invisibleWindow) {
+      invisibleWindow.show();
+    }
+
+    return { success: false, error: "Failed to capture screenshot" };
+  } catch (error) {
+    console.error("Area screenshot failed:", error);
+
+    // Close selection window if still open
+    if (selectionWindow) {
+      selectionWindow.close();
+      selectionWindow = null;
+    }
+
+    // Restore main window
+    if (invisibleWindow) {
+      invisibleWindow.show();
+    }
+
+    return { success: false, error: error.message };
+  }
+});
+
+
+ipcMain.handle("cancel-area-screenshot", () => {
+  // Close selection window
+  if (selectionWindow) {
+    selectionWindow.close();
+    selectionWindow = null;
+  }
+
+  // Restore main window
+  if (invisibleWindow) {
+    invisibleWindow.show();
+  }
+
+  return true;
+});
+
+
 
 ipcMain.handle("test-response", async (event, prompt) => {
   try {
@@ -384,6 +499,51 @@ function createSettingsWindow() {
   });
 }
 
+let selectionWindow = null;
+
+function createSelectionWindow() {
+  if (selectionWindow) {
+    selectionWindow.close();
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+
+  selectionWindow = new BrowserWindow({
+    fullscreen: true,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  // Set window type to screen saver level on macOS
+  if (process.platform === "darwin") {
+    selectionWindow.setAlwaysOnTop(true, "screen-saver");
+  }
+
+  selectionWindow.loadFile("selection.html");
+
+  // Open DevTools in development
+  if (process.argv.includes("--debug")) {
+    selectionWindow.webContents.openDevTools();
+  }
+
+  selectionWindow.on("closed", () => {
+    selectionWindow = null;
+    if (invisibleWindow) {
+      invisibleWindow.showInactive();
+    }
+  });
+}
+
 // Register global shortcuts
 function registerShortcuts() {
   // Screenshot shortcut (Command/Ctrl + H)
@@ -408,11 +568,16 @@ function registerShortcuts() {
       if (screenshotPath) {
         console.log("Screenshot saved:", screenshotPath);
 
-        // Enable mouse events so user can interact with question dialog
+        // Show and enable mouse events so user can interact with question dialog
         if (invisibleWindow) {
+          invisibleWindow.show(); // CHANGED from showInactive()
+          invisibleWindow.focus(); // ADD focus
           invisibleWindow.setIgnoreMouseEvents(false);
           invisibleWindow.webContents.isIgnoringMouseEvents = false;
         }
+
+        // Small delay to ensure window is visible
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Notify renderer about successful capture
         if (invisibleWindow) {
@@ -422,18 +587,20 @@ function registerShortcuts() {
           });
         }
       }
-
-      // Show window again after a brief delay
-      setTimeout(() => {
-        if (invisibleWindow) {
-          invisibleWindow.showInactive();
-        }
-      }, 200);
     } catch (error) {
       console.error("Screenshot failed:", error);
       if (invisibleWindow) {
-        invisibleWindow.showInactive();
+        invisibleWindow.show(); // CHANGED from showInactive()
       }
+    }
+  });
+
+  // Area screenshot shortcut (Command/Ctrl + Shift + H)
+  globalShortcut.register("CommandOrControl+Shift+H", async () => {
+    if (invisibleWindow) {
+      await invisibleWindow.webContents.executeJavaScript(`
+        window.electronAPI.startAreaScreenshot();
+      `);
     }
   });
 

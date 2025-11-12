@@ -125,9 +125,92 @@ async function captureFullScreen(desktopCapturer, screen) {
   return outputPath;
 }
 
+// Captures a specific area of the screen
+// Captures a specific area of the screen
+async function captureAreaScreenshot(desktopCapturer, screen, area) {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.bounds;
+  const scaleFactor = primaryDisplay.scaleFactor;
+
+  console.log("=== Screenshot Debug Info ===");
+  console.log("Screen bounds:", primaryDisplay.bounds);
+  console.log("Screen size:", primaryDisplay.size);
+  console.log("Scale factor:", scaleFactor);
+  console.log("Selection area:", area);
+
+  // Capture at full resolution
+  const sources = await desktopCapturer.getSources({
+    types: ["screen"],
+    thumbnailSize: {
+      width: screenWidth * scaleFactor,
+      height: screenHeight * scaleFactor
+    },
+  });
+
+  if (!sources.length) {
+    console.error("No screen sources found.");
+    return null;
+  }
+
+  const image = sources[0].thumbnail;
+  const imageSize = image.getSize();
+  console.log("Captured image size:", imageSize);
+
+  // Calculate the actual scale between captured image and screen bounds
+  const actualScaleX = imageSize.width / screenWidth;
+  const actualScaleY = imageSize.height / screenHeight;
+
+  console.log("Actual scale X:", actualScaleX);
+  console.log("Actual scale Y:", actualScaleY);
+
+  // Apply the actual scale to the selection coordinates
+  const cropArea = {
+    x: Math.round(area.x * actualScaleX),
+    y: Math.round(area.y * actualScaleY),
+    width: Math.round(area.width * actualScaleX),
+    height: Math.round(area.height * actualScaleY),
+  };
+
+  console.log("Scaled crop area:", cropArea);
+
+  // Ensure crop area is within bounds
+  cropArea.x = Math.max(0, Math.min(cropArea.x, imageSize.width));
+  cropArea.y = Math.max(0, Math.min(cropArea.y, imageSize.height));
+  cropArea.width = Math.min(cropArea.width, imageSize.width - cropArea.x);
+  cropArea.height = Math.min(cropArea.height, imageSize.height - cropArea.y);
+
+  console.log("Final crop area:", cropArea);
+  console.log("===========================");
+
+  // Validate crop area
+  if (cropArea.width <= 0 || cropArea.height <= 0) {
+    console.error("Invalid crop area dimensions");
+    return null;
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+  // Crop the image to the selected area
+  const croppedImage = image.crop(cropArea);
+
+  // Save to app's user data directory
+  const screenshotsDir = ensureScreenshotsDirectory();
+  const outputPath = path.join(screenshotsDir, `screenshot-${timestamp}.png`);
+
+  fs.writeFileSync(outputPath, croppedImage.toPNG());
+  console.log("Area screenshot saved to:", outputPath);
+
+  // Clean up old screenshots
+  cleanupOldScreenshots();
+
+  return outputPath;
+}
+
+
 module.exports = {
   ensureScreenRecordingPermission,
   captureFullScreen,
+  captureAreaScreenshot,
   getRecentScreenshots,
   cleanupOldScreenshots,
   ensureScreenshotsDirectory,

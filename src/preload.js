@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onScreenshotCaptured: (callback) =>
     ipcRenderer.on("screenshot-captured", (event, value) => callback(value)),
   analyzeScreenshot: (data) => ipcRenderer.invoke("analyze-screenshot", data),
+  startAreaScreenshot: () => ipcRenderer.invoke("start-area-screenshot"),
+  captureAreaScreenshot: (area) => ipcRenderer.invoke("capture-area-screenshot", area),
+  cancelAreaScreenshot: () => ipcRenderer.invoke("cancel-area-screenshot"),
+
   testResponse: (prompt) => ipcRenderer.invoke("test-response", prompt),
   getScreenshotsDirectory: () =>
     ipcRenderer.invoke("get-screenshots-directory"),
