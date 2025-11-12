@@ -199,25 +199,26 @@ ipcMain.handle("capture-area-screenshot", async (event, area) => {
 
     if (screenshotPath) {
       console.log("Area screenshot saved:", screenshotPath);
+      createEditorWindow(screenshotPath);
 
-      // Show and enable mouse events for question dialog
-      if (invisibleWindow) {
-        invisibleWindow.show(); // Use show() instead of showInactive()
-        invisibleWindow.focus(); // Make sure it gets focus
-        invisibleWindow.setIgnoreMouseEvents(false);
-        invisibleWindow.webContents.isIgnoringMouseEvents = false;
-      }
+      // // Show and enable mouse events for question dialog
+      // if (invisibleWindow) {
+      //   invisibleWindow.show(); // Use show() instead of showInactive()
+      //   invisibleWindow.focus(); // Make sure it gets focus
+      //   invisibleWindow.setIgnoreMouseEvents(false);
+      //   invisibleWindow.webContents.isIgnoringMouseEvents = false;
+      // }
 
-      // Small delay to ensure window is visible
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // // Small delay to ensure window is visible
+      // await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Notify renderer about successful capture
-      if (invisibleWindow) {
-        invisibleWindow.webContents.send("screenshot-captured", {
-          filePath: screenshotPath,
-          timestamp: Date.now(),
-        });
-      }
+      // // Notify renderer about successful capture
+      // if (invisibleWindow) {
+      //   invisibleWindow.webContents.send("screenshot-captured", {
+      //     filePath: screenshotPath,
+      //     timestamp: Date.now(),
+      //   });
+      // }
 
       return { success: true, filePath: screenshotPath };
     }
@@ -246,6 +247,70 @@ ipcMain.handle("capture-area-screenshot", async (event, area) => {
   }
 });
 
+ipcMain.handle("open-editor", async (event, filePath) => {
+  try {
+    createEditorWindow(filePath);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to open editor:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("save-edited-screenshot", async (event, base64Data) => {
+  try {
+    const { ensureScreenshotsDirectory } = require("./screenshot");
+    const screenshotsDir = ensureScreenshotsDirectory();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputPath = path.join(screenshotsDir, `screenshot-edited-${timestamp}.png`);
+
+    // Convert base64 to buffer and save
+    const buffer = Buffer.from(base64Data, "base64");
+    fs.writeFileSync(outputPath, buffer);
+
+    console.log("Edited screenshot saved:", outputPath);
+
+    // Close editor
+    if (editorWindow) {
+      editorWindow.close();
+      editorWindow = null;
+    }
+
+    // Show main window and enable interaction
+    if (invisibleWindow) {
+      invisibleWindow.show();
+      invisibleWindow.focus();
+      invisibleWindow.setIgnoreMouseEvents(false);
+      invisibleWindow.webContents.isIgnoringMouseEvents = false;
+    }
+
+    // Send the edited screenshot to the chat
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (invisibleWindow) {
+      invisibleWindow.webContents.send("screenshot-captured", {
+        filePath: outputPath,
+        timestamp: Date.now(),
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to save edited screenshot:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("cancel-editor", () => {
+  if (editorWindow) {
+    editorWindow.close();
+    editorWindow = null;
+  }
+  if (invisibleWindow) {
+    invisibleWindow.show();
+  }
+  return true;
+});
 
 ipcMain.handle("cancel-area-screenshot", () => {
   // Close selection window
@@ -500,6 +565,7 @@ function createSettingsWindow() {
 }
 
 let selectionWindow = null;
+let editorWindow = null;
 
 function createSelectionWindow() {
   if (selectionWindow) {
@@ -544,6 +610,43 @@ function createSelectionWindow() {
   });
 }
 
+function createEditorWindow(filePath) {
+  if (editorWindow) {
+    editorWindow.close();
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
+  editorWindow = new BrowserWindow({
+    width: Math.min(1200, width - 100),
+    height: Math.min(800, height - 100),
+    frame: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  editorWindow.loadFile("editor.html", {
+    query: { file: filePath },
+  });
+
+  // Open DevTools in development
+  if (process.argv.includes("--debug")) {
+    editorWindow.webContents.openDevTools();
+  }
+
+  editorWindow.on("closed", () => {
+    editorWindow = null;
+    if (invisibleWindow) {
+      invisibleWindow.show();
+    }
+  });
+}
+
 // Register global shortcuts
 function registerShortcuts() {
   // Screenshot shortcut (Command/Ctrl + H)
@@ -567,25 +670,26 @@ function registerShortcuts() {
       const screenshotPath = await captureFullScreen(desktopCapturer, screen);
       if (screenshotPath) {
         console.log("Screenshot saved:", screenshotPath);
+        createEditorWindow(screenshotPath);
 
-        // Show and enable mouse events so user can interact with question dialog
-        if (invisibleWindow) {
-          invisibleWindow.show(); // CHANGED from showInactive()
-          invisibleWindow.focus(); // ADD focus
-          invisibleWindow.setIgnoreMouseEvents(false);
-          invisibleWindow.webContents.isIgnoringMouseEvents = false;
-        }
+        // // Show and enable mouse events so user can interact with question dialog
+        // if (invisibleWindow) {
+        //   invisibleWindow.show(); // CHANGED from showInactive()
+        //   invisibleWindow.focus(); // ADD focus
+        //   invisibleWindow.setIgnoreMouseEvents(false);
+        //   invisibleWindow.webContents.isIgnoringMouseEvents = false;
+        // }
 
-        // Small delay to ensure window is visible
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // // Small delay to ensure window is visible
+        // await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // Notify renderer about successful capture
-        if (invisibleWindow) {
-          invisibleWindow.webContents.send("screenshot-captured", {
-            filePath: screenshotPath,
-            timestamp: Date.now(),
-          });
-        }
+        // // Notify renderer about successful capture
+        // if (invisibleWindow) {
+        //   invisibleWindow.webContents.send("screenshot-captured", {
+        //     filePath: screenshotPath,
+        //     timestamp: Date.now(),
+        //   });
+        // }
       }
     } catch (error) {
       console.error("Screenshot failed:", error);
