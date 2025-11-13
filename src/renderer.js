@@ -539,7 +539,42 @@ async function submitTextQuestion() {
   scrollToBottom();
   updateNullStateVisibility();
 
-  // ... rest of existing code remains the same ...
+  // Show typing indicator
+  typingIndicator.classList.add("visible");
+
+  // Add a placeholder for the assistant's response
+  currentMessageId = Date.now().toString();
+  const assistantMessage = {
+    type: "assistant",
+    timestamp: Date.now(),
+    messageId: currentMessageId,
+    content: "",
+    status: "pending",
+  };
+  messages.push(assistantMessage);
+
+  const assistantMessageEl = createMessageElement(currentMessageId);
+  chatHistory.appendChild(assistantMessageEl);
+  scrollToBottom();
+
+  try {
+    // FIXED: Call testResponse instead of analyzeScreenshot for text-only questions
+    const result = await window.electronAPI.testResponse(prompt);
+
+    if (!result.success) {
+      typingIndicator.classList.remove("visible");
+      addErrorMessage(result.error);
+      if (assistantMessageEl) {
+        assistantMessageEl.remove();
+      }
+    }
+  } catch (error) {
+    typingIndicator.classList.remove("visible");
+    addErrorMessage(error.message);
+    if (assistantMessageEl) {
+      assistantMessageEl.remove();
+    }
+  }
 }
 
 async function cancelTextQuestion() {

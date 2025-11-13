@@ -4,6 +4,7 @@ const axios = require("axios");
 const { ipcMain } = require("electron");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
+const path = require("path");
 const config = require("./config");
 const learningService = require("./learning-service");
 
@@ -128,7 +129,7 @@ const SYSTEM_PROMPT = `You are an elite trading analyst specializing in price ac
 
 
 let isInitialized = false;
-let tradingDocumentContext = "./base.txt"; // Store the trading document content
+let tradingDocumentContext = null; // FIXED: Initialize as null instead of string path
 
 // Initialize the LLM service
 function initializeGemini() {
@@ -170,7 +171,7 @@ function fileToGenerativePart(path, mimeType) {
   };
 }
 
-// NEW: Function to load trading document
+// Function to load trading document
 function loadTradingDocument(documentPath) {
   try {
     if (fs.existsSync(documentPath)) {
@@ -189,7 +190,6 @@ function loadTradingDocument(documentPath) {
     return false;
   }
 }
-
 // NEW: Function to clear trading document
 function clearTradingDocument() {
   tradingDocumentContext = null;
@@ -274,5 +274,5 @@ module.exports = {
   loadTradingDocument,
   clearTradingDocument,
   getTradingDocumentStatus: () => !!tradingDocumentContext,
-  learningService, // ADD THIS LINE
+  learningService,
 };

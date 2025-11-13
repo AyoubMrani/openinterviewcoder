@@ -25,7 +25,7 @@ const {
   loadTradingDocument,
   clearTradingDocument,
   getTradingDocumentStatus,
-  learningService, // ADD THIS LINE
+  learningService,
 } = require("./llm-service");
 const config = require("./config");
 
@@ -34,6 +34,13 @@ let maxInputTokens = 1048576; // Default, will be updated
 let isCompactMode = true; // Start in compact mode
 const COMPACT_SIZE = 400; // Square size (400x400)
 const COMPACT_MARGIN = 20; // Margin from screen edge
+
+// IMPORTANT: Declare these variables at the top
+let invisibleWindow;
+let settingsWindow = null;
+let tray = null;
+let selectionWindow = null;
+let editorWindow = null;
 
 // IPC handler to load trading document
 ipcMain.handle("load-trading-document", async (event, filePath) => {
@@ -113,11 +120,11 @@ ipcMain.handle("select-trading-document", async () => {
 // IPC handlers for settings
 ipcMain.handle("get-settings", () => {
   return {
-    geminiKey: config.getGeminiKey(), // +++ CHANGED +++
+    geminiKey: config.getGeminiKey(),
   };
 });
 
-// +++ ADD IPC HANDLER FOR TOKEN INFO +++
+// IPC handler for token info
 ipcMain.handle("get-token-info", () => {
   return {
     current: sessionTotalTokens,
@@ -134,8 +141,8 @@ ipcMain.handle("scroll-chat", (event, direction) => {
 });
 
 ipcMain.handle("save-settings", async (event, settings) => {
-  if (settings.geminiKey) { // +++ CHANGED +++
-    config.setGeminiKey(settings.geminiKey); // +++ CHANGED +++
+  if (settings.geminiKey) {
+    config.setGeminiKey(settings.geminiKey);
     // Reinitialize LLM service with new API key
     await initializeLLMService();
   }
@@ -190,11 +197,38 @@ ipcMain.handle("hide-window", () => {
   }
 });
 
-// +++ NEW IPC HANDLERS FOR GEMINI +++
+// FIXED: IPC handler for analyzing screenshot
 ipcMain.handle("analyze-screenshot", async (event, data) => {
   try {
+    // Get the market from data
+    const market = data.market || "default";
+    
+    // Build path to data folder for this market
+    const dataFolder = path.join(app.getPath("userData"), "data", market);
+    
+    console.log("=== Analyze Screenshot Debug ===");
+    console.log("Market:", market);
+    console.log("Data folder:", dataFolder);
+    console.log("Screenshot path:", data.filePath);
+    
+    // Ensure data folder exists
+    if (!fs.existsSync(dataFolder)) {
+      fs.mkdirSync(dataFolder, { recursive: true });
+      console.log("Created data folder:", dataFolder);
+    }
+
     // Get daily and 1-hour charts
-    const dataImages = await ipcMain.invoke("get-data-images");
+    const dailyPath = path.join(dataFolder, "daily.png");
+    const oneHourPath = path.join(dataFolder, "1hour.png");
+    
+    const dataImages = {
+      daily: fs.existsSync(dailyPath) ? dailyPath : null,
+      oneHour: fs.existsSync(oneHourPath) ? oneHourPath : null,
+    };
+    
+    console.log("Daily chart:", dataImages.daily ? "Found" : "Not found");
+    console.log("1-hour chart:", dataImages.oneHour ? "Found" : "Not found");
+    console.log("================================");
 
     const prompt = data.prompt || "Analyze this screenshot and provide trading insights.";
 
@@ -209,7 +243,7 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
 
       // Save analysis to learning service
       const analysisId = learningService.saveAnalysis({
-        market: data.market || "Not specified", // ADD THIS
+        market: data.market || "Not specified",
         screenshot: data.filePath,
         daily: dataImages.daily,
         oneHour: dataImages.oneHour,
@@ -220,7 +254,7 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
       event.sender.send("llm-response", {
         success: true,
         content: result.content,
-        analysisId: analysisId, // Send ID for feedback
+        analysisId: analysisId,
       });
 
       event.sender.send("token-usage-updated", {
@@ -230,6 +264,7 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
     }
     return { success: true };
   } catch (error) {
+    console.error("Analyze screenshot error:", error);
     event.sender.send("llm-response", {
       success: false,
       error: error.message,
@@ -246,7 +281,7 @@ ipcMain.handle("restore-mouse-ignore", () => {
   return true;
 });
 
-// ADD THIS NEW HANDLER:
+// IPC handler for starting area screenshot
 ipcMain.handle("start-area-screenshot", async () => {
   try {
     // Hide the main window
@@ -296,25 +331,6 @@ ipcMain.handle("capture-area-screenshot", async (event, area) => {
     if (screenshotPath) {
       console.log("Area screenshot saved:", screenshotPath);
       createEditorWindow(screenshotPath);
-
-      // // Show and enable mouse events for question dialog
-      // if (invisibleWindow) {
-      //   invisibleWindow.show(); // Use show() instead of showInactive()
-      //   invisibleWindow.focus(); // Make sure it gets focus
-      //   invisibleWindow.setIgnoreMouseEvents(false);
-      //   invisibleWindow.webContents.isIgnoringMouseEvents = false;
-      // }
-
-      // // Small delay to ensure window is visible
-      // await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // // Notify renderer about successful capture
-      // if (invisibleWindow) {
-      //   invisibleWindow.webContents.send("screenshot-captured", {
-      //     filePath: screenshotPath,
-      //     timestamp: Date.now(),
-      //   });
-      // }
 
       return { success: true, filePath: screenshotPath };
     }
@@ -423,8 +439,6 @@ ipcMain.handle("cancel-area-screenshot", () => {
   return true;
 });
 
-
-
 ipcMain.handle("test-response", async (event, prompt) => {
   try {
     const result = await makeLLMRequest(prompt, null); // No file for test
@@ -440,35 +454,36 @@ ipcMain.handle("test-response", async (event, prompt) => {
         max: maxInputTokens,
       });
     }
-    // Return a plain, cloneable object on success
     return { success: true };
   } catch (error) {
-    // On failure, send an error message to the renderer
     event.sender.send("llm-response", {
       success: false,
       error: error.message,
     });
-    // And RETURN a plain, cloneable object as the rejection value
     return { success: false, error: error.message };
   }
 });
 
-// IPC handler for getting data folder images
+// FIXED: IPC handler for getting data folder images
 ipcMain.handle("get-data-images", (event, market) => {
-  const dataFolder = path.join(app.getPath("userData"), "data", market || "default");
+  const marketFolder = market || "default";
+  const dataFolder = path.join(app.getPath("userData"), "data", marketFolder);
 
-  // ADD THIS ↓↓↓
+  console.log("=== Get Data Images ===");
+  console.log("Market:", marketFolder);
   console.log("Checking data images in:", dataFolder);
-  console.log("daily.png exists:", fs.existsSync(path.join(dataFolder, "daily.png")));
-  console.log("1hour.png exists:", fs.existsSync(path.join(dataFolder, "1hour.png")));
-
 
   if (!fs.existsSync(dataFolder)) {
+    console.log("Data folder doesn't exist, creating:", dataFolder);
     fs.mkdirSync(dataFolder, { recursive: true });
   }
 
   const dailyPath = path.join(dataFolder, "daily.png");
   const oneHourPath = path.join(dataFolder, "1hour.png");
+
+  console.log("daily.png exists:", fs.existsSync(dailyPath));
+  console.log("1hour.png exists:", fs.existsSync(oneHourPath));
+  console.log("=======================");
 
   return {
     daily: fs.existsSync(dailyPath) ? dailyPath : null,
@@ -491,11 +506,6 @@ ipcMain.handle("save-feedback", async (event, data) => {
 ipcMain.handle("get-learning-stats", () => {
   return learningService.getStats();
 });
-
-
-let invisibleWindow;
-let settingsWindow = null;
-let tray = null;
 
 // Create shared menu template
 function createMenuTemplate() {
@@ -699,9 +709,6 @@ function createSettingsWindow() {
   });
 }
 
-let selectionWindow = null;
-let editorWindow = null;
-
 function createSelectionWindow() {
   if (selectionWindow) {
     selectionWindow.close();
@@ -806,30 +813,11 @@ function registerShortcuts() {
       if (screenshotPath) {
         console.log("Screenshot saved:", screenshotPath);
         createEditorWindow(screenshotPath);
-
-        // // Show and enable mouse events so user can interact with question dialog
-        // if (invisibleWindow) {
-        //   invisibleWindow.show(); // CHANGED from showInactive()
-        //   invisibleWindow.focus(); // ADD focus
-        //   invisibleWindow.setIgnoreMouseEvents(false);
-        //   invisibleWindow.webContents.isIgnoringMouseEvents = false;
-        // }
-
-        // // Small delay to ensure window is visible
-        // await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // // Notify renderer about successful capture
-        // if (invisibleWindow) {
-        //   invisibleWindow.webContents.send("screenshot-captured", {
-        //     filePath: screenshotPath,
-        //     timestamp: Date.now(),
-        //   });
-        // }
       }
     } catch (error) {
       console.error("Screenshot failed:", error);
       if (invisibleWindow) {
-        invisibleWindow.show(); // CHANGED from showInactive()
+        invisibleWindow.show();
       }
     }
   });
@@ -881,7 +869,6 @@ function registerShortcuts() {
   globalShortcut.register("CommandOrControl+Space", () => {
     toggleWindowMode();
   });
-
 
   // Window movement shortcuts
   const NUDGE_AMOUNT = 50;
@@ -982,9 +969,8 @@ function registerShortcuts() {
 // When app is ready
 app.whenReady().then(async () => {
   // Load API key from config before initializing services
-  const apiKey = config.getGeminiKey(); // +++ CHANGED +++
+  const apiKey = config.getGeminiKey();
   if (apiKey) {
-    // The library handles the key internally, no need for process.env
     initializeLLMService();
     try {
       // Fetch model info on startup
@@ -998,21 +984,22 @@ app.whenReady().then(async () => {
 
   createInvisibleWindow();
   registerShortcuts();
-  await initializeLLMService();
 
   // Create tray icon for Windows
   if (process.platform === "win32") {
-    tray = new Tray(path.join(__dirname, "../assets/OCTO.png")); // Ensure you have this asset
-    const contextMenu = Menu.buildFromTemplate([
-      { label: "Show", click: () => invisibleWindow.show() },
-      { label: "Hide", click: () => invisibleWindow.hide() },
-      // +++ ADDED THIS LINE +++
-      { label: "Settings...", click: () => createSettingsWindow() },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ]);
-    tray.setToolTip("Open Interview Coder");
-    tray.setContextMenu(contextMenu);
+    const trayIconPath = path.join(__dirname, "../assets/OCTO.png");
+    if (fs.existsSync(trayIconPath)) {
+      tray = new Tray(trayIconPath);
+      const contextMenu = Menu.buildFromTemplate([
+        { label: "Show", click: () => invisibleWindow.show() },
+        { label: "Hide", click: () => invisibleWindow.hide() },
+        { label: "Settings...", click: () => createSettingsWindow() },
+        { type: "separator" },
+        { label: "Quit", click: () => app.quit() },
+      ]);
+      tray.setToolTip("Open Interview Coder");
+      tray.setContextMenu(contextMenu);
+    }
   }
 
   app.on("activate", function () {
