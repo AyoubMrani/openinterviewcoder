@@ -79,7 +79,7 @@
       </div>
     </div>
 
-    <!-- NEW: Question Input Overlay -->
+    <!-- Question Input Overlay -->
     <div id="question-overlay" class="question-overlay" style="display: none;">
       <div class="question-container">
         <div class="question-header">
@@ -89,6 +89,24 @@
         <div class="question-preview">
           <img id="question-screenshot-preview" src="" alt="Screenshot preview" />
         </div>
+
+        <!-- ADD THIS MARKET SELECTOR -->
+        <div class="market-selector">
+          <label for="market-select">Market/Pair:</label>
+          <select id="market-select">
+            <option value="EURUSD">EUR/USD</option>
+            <option value="GBPUSD">GBP/USD</option>
+            <option value="USDJPY">USD/JPY</option>
+            <option value="GOLD">Gold (XAU/USD)</option>
+            <option value="BTCUSD">Bitcoin (BTC/USD)</option>
+            <option value="US30">US30 (Dow Jones)</option>
+            <option value="NAS100">NAS100 (Nasdaq)</option>
+            <option value="SPX500">S&P 500</option>
+            <option value="CUSTOM">Custom...</option>
+          </select>
+          <input type="text" id="custom-market" placeholder="Enter custom market" style="display: none;" />
+        </div>
+
         <textarea id="question-input" placeholder="What would you like to know about this screenshot?"
           rows="3"></textarea>
         <div class="question-actions">
@@ -97,19 +115,38 @@
       </div>
     </div>
 
-    <!-- NEW: Text-Only Question Overlay -->
+    <!-- Text-Only Question Overlay -->
     <div id="text-question-overlay" class="question-overlay" style="display: none;">
       <div class="question-container">
         <div class="question-header">
           <h3>Ask me anything</h3>
           <button id="cancel-text-question" class="cancel-btn">✕</button>
         </div>
+
+        <!-- ADD THIS MARKET SELECTOR TOO -->
+        <div class="market-selector">
+          <label for="text-market-select">Market/Pair:</label>
+          <select id="text-market-select">
+            <option value="EURUSD">EUR/USD</option>
+            <option value="GBPUSD">GBP/USD</option>
+            <option value="USDJPY">USD/JPY</option>
+            <option value="GOLD">Gold (XAU/USD)</option>
+            <option value="BTCUSD">Bitcoin (BTC/USD)</option>
+            <option value="US30">US30 (Dow Jones)</option>
+            <option value="NAS100">NAS100 (Nasdaq)</option>
+            <option value="SPX500">S&P 500</option>
+            <option value="CUSTOM">Custom...</option>
+          </select>
+          <input type="text" id="text-custom-market" placeholder="Enter custom market" style="display: none;" />
+        </div>
+
         <textarea id="text-question-input" placeholder="Type your question here..." rows="3"></textarea>
         <div class="question-actions">
           <button id="submit-text-question" class="submit-btn">Submit</button>
         </div>
       </div>
     </div>
+
   </div>
 
 

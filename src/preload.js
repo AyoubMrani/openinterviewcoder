@@ -75,6 +75,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   restoreMouseIgnore: () => ipcRenderer.invoke("restore-mouse-ignore"),
 
+  saveFeedback: (data) => ipcRenderer.invoke("save-feedback", data),
+  getLearningStats: () => ipcRenderer.invoke("get-learning-stats"),
+  onShowFeedbackPopup: (callback) =>
+    ipcRenderer.on("show-feedback-popup", (event, value) => callback(value)),
+
 });
 
 // No need for additional electron context bridge since we're handling everything through electronAPI

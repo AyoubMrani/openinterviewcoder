@@ -25,6 +25,7 @@ const {
   loadTradingDocument,
   clearTradingDocument,
   getTradingDocumentStatus,
+  learningService, // ADD THIS LINE
 } = require("./llm-service");
 const config = require("./config");
 
@@ -80,7 +81,7 @@ ipcMain.handle("get-trading-document-status", () => {
 // IPC handler to open file dialog for selecting trading document
 ipcMain.handle("select-trading-document", async () => {
   const { dialog } = require("electron");
-  
+
   const result = await dialog.showOpenDialog({
     properties: ["openFile"],
     filters: [
@@ -92,7 +93,7 @@ ipcMain.handle("select-trading-document", async () => {
   if (!result.canceled && result.filePaths.length > 0) {
     const filePath = result.filePaths[0];
     const loadResult = loadTradingDocument(filePath);
-    
+
     if (loadResult) {
       if (invisibleWindow) {
         invisibleWindow.webContents.send("trading-document-loaded", {
@@ -192,20 +193,36 @@ ipcMain.handle("hide-window", () => {
 // +++ NEW IPC HANDLERS FOR GEMINI +++
 ipcMain.handle("analyze-screenshot", async (event, data) => {
   try {
-    // Use custom prompt if provided, otherwise use default
-    const prompt = data.prompt || "Analyze this screenshot and provide insights.";
+    // Get daily and 1-hour charts
+    const dataImages = await ipcMain.invoke("get-data-images");
+
+    const prompt = data.prompt || "Analyze this screenshot and provide trading insights.";
 
     const result = await makeLLMRequest(
       prompt,
-      data.filePath
+      data.filePath,
+      dataImages // Pass the additional images
     );
 
     if (result.success) {
       sessionTotalTokens += result.tokensUsed;
+
+      // Save analysis to learning service
+      const analysisId = learningService.saveAnalysis({
+        market: data.market || "Not specified", // ADD THIS
+        screenshot: data.filePath,
+        daily: dataImages.daily,
+        oneHour: dataImages.oneHour,
+        prompt: prompt,
+        response: result.content,
+      });
+
       event.sender.send("llm-response", {
         success: true,
         content: result.content,
+        analysisId: analysisId, // Send ID for feedback
       });
+
       event.sender.send("token-usage-updated", {
         current: sessionTotalTokens,
         max: maxInputTokens,
@@ -434,6 +451,45 @@ ipcMain.handle("test-response", async (event, prompt) => {
     // And RETURN a plain, cloneable object as the rejection value
     return { success: false, error: error.message };
   }
+});
+
+// IPC handler for getting data folder images
+ipcMain.handle("get-data-images", (event, market) => {
+  const dataFolder = path.join(app.getPath("userData"), "data", market || "default");
+
+  // ADD THIS ↓↓↓
+  console.log("Checking data images in:", dataFolder);
+  console.log("daily.png exists:", fs.existsSync(path.join(dataFolder, "daily.png")));
+  console.log("1hour.png exists:", fs.existsSync(path.join(dataFolder, "1hour.png")));
+
+
+  if (!fs.existsSync(dataFolder)) {
+    fs.mkdirSync(dataFolder, { recursive: true });
+  }
+
+  const dailyPath = path.join(dataFolder, "daily.png");
+  const oneHourPath = path.join(dataFolder, "1hour.png");
+
+  return {
+    daily: fs.existsSync(dailyPath) ? dailyPath : null,
+    oneHour: fs.existsSync(oneHourPath) ? oneHourPath : null,
+  };
+});
+
+// IPC handler for feedback
+ipcMain.handle("save-feedback", async (event, data) => {
+  try {
+    learningService.updateFeedback(data.analysisId, data.wasUseful, data.tradeSuccessful);
+    return { success: true };
+  } catch (error) {
+    console.error("Error saving feedback:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handler for learning stats
+ipcMain.handle("get-learning-stats", () => {
+  return learningService.getStats();
 });
 
 

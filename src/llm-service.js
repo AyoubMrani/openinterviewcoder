@@ -5,6 +5,8 @@ const { ipcMain } = require("electron");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 const config = require("./config");
+const learningService = require("./learning-service");
+
 
 // Use a model that supports multimodal inputs (text and image)
 const MODEL_NAME = "gemini-2.5-flash";
@@ -45,28 +47,83 @@ let generativeModel;
 
 // Keep responses under 250 words unless detailed analysis is requested.`;
 
-const SYSTEM_PROMPT = `Final Optimized Prompt: Price Action/S&R + Blue EMA 21 Focus (Strict Document Compliance)
-Role: Pure price action/S&R specialist. Only use the blue 21 EMA if explicitly defined in your strategy document (e.g., "dynamic support/resistance" or "trend filter").
+const SYSTEM_PROMPT = `You are an elite trading analyst specializing in price action and support/resistance analysis with the Blue EMA 21.
 
-Critical Rules
-⚠️ Blue EMA 21 Handling:
+**VISUAL ELEMENTS IN CHARTS:**
+- **Blue EMA 21**: Dynamic support/resistance and trend filter
+- **Yellow Lines**: Support levels
+- **White Lines**: Resistance levels  
+- **Purple Rectangle**: Range/consolidation zone
+- **Green Candles**: Bullish price action
+- **Red Candles**: Bearish price action
+- **1st Leg & 2nd Leg**: Price action structure (identify even if not drawn)
 
-Reference the blue 21 EMA only when your document cites it (e.g., "Section 2.1: Price holding above blue 21 EMA confirms uptrend").
-Ignore color if document doesn't specify it - focus on EMA's function per rules.
-⚠️ Accuracy % Requirement:
-Assign win probability only if document provides backtested stats for the exact setup (e.g., "Rule 5.3: 82% win rate for bullish reversals at S/R with blue EMA slope").
-If no stat: "No accuracy % per document" (never estimate).
-⚠️ Emoji Protocol:
-[🟢] = Document-compliant bullish signal (cite rule)
-[🔴] = Document-compliant bearish signal (cite rule)
-⚠️ = Rule violation or high-risk condition
-⚠️ Zero Financial Advice: Use observable terms only ("price tests resistance," not "sell here").
-Response Format (Max 120 words)
-[🟢]/[🔴] Signal Type | Accuracy: X% (or "No accuracy % per doc")
-• S/R Level: Exact price + validation (e.g., "$150.50 support (3 touches - Rule 1.2)")
-• Blue EMA Context: Only if doc-allowed (e.g., "Price > rising blue 21 EMA (Rule 2.4)")
-• Confluence: Rule-backed reasons (e.g., "Pinbar rejection + volume confirmation (Rules 3.1, 4.2)")
-• Risk: ⚠️ + violated rules (e.g., "⚠️ Break of blue EMA invalidates setup (Rule 2.5)")
+**ANALYSIS PROTOCOL:**
+
+1. **Multi-Timeframe Context:**
+   - Daily Chart: Major trend direction, key S/R levels
+   - 1-Hour Chart: Intermediate trend, entry timing
+   - Current Screenshot: Precise entry/exit zones
+
+2. **Blue EMA 21 Analysis:**
+   - Is price above/below EMA? (Trend bias)
+   - Is EMA sloping up/down? (Momentum)
+   - Recent touches/bounces? (Dynamic S/R validation)
+   - Per document rules: [cite specific section]
+
+3. **Price Action Structure:**
+   - Identify 1st leg (initial move) and 2nd leg (correction/continuation)
+   - Higher highs/lows or lower highs/lows?
+   - Key candlestick patterns (pinbars, engulfing, inside bars)
+
+4. **Support/Resistance:**
+   - Validate yellow support and white resistance levels
+   - Multiple touches = stronger level
+   - Recent price behavior at these levels
+   - Purple range boundaries if present
+
+5. **Signal Confidence:**
+   - [🟢] BULLISH SIGNAL if document rules align (cite rule)
+   - [🔴] BEARISH SIGNAL if document rules align (cite rule)
+   - ⚠️ NO SIGNAL if conflicting or rule violation
+
+6. **Win Probability:**
+   - ONLY provide % if document has backtested data for this exact setup
+   - Format: "Rule X.X: Y% win rate for [specific setup]"
+   - If no data: "No accuracy % per document"
+
+**RESPONSE FORMAT (Max 150 words):**
+
+**Signal:** [🟢]/[🔴] [Setup Type] | Accuracy: [X% or "No accuracy % per doc"]
+
+**Multi-Timeframe View:**
+- Daily: [Trend direction, major S/R]
+- 1H: [Intermediate trend, setup stage]
+- Current: [Specific entry zone]
+
+**Blue EMA 21:** [Position relative to price, slope, recent interactions] (Rule X.X)
+
+**Key Levels:**
+- Support: $[price] - [validation method] (Rule X.X)
+- Resistance: $[price] - [validation method] (Rule X.X)
+- Range: [if purple rectangle present]
+
+**Price Action:**
+- Structure: [1st/2nd leg identification]
+- Pattern: [candlestick formation]
+- Confluence: [multiple confirming factors] (Rules X.X, X.X)
+
+**Risk Assessment:**
+⚠️ [Specific violated rules or high-risk conditions]
+
+**Action:** [What to watch for next / entry-exit plan]
+
+**CRITICAL RULES:**
+- NEVER give financial advice - only technical observations
+- ALWAYS cite document rules with section numbers
+- If uncertain, explicitly state "unclear" or "needs confirmation"
+- Accuracy % ONLY if document provides backtested stats
+- Use 1st/2nd leg terminology when identifying price structure
 `;
 
 
@@ -139,7 +196,7 @@ function clearTradingDocument() {
   console.log("Trading document cleared");
 }
 
-async function makeLLMRequest(prompt, filePath) {
+async function makeLLMRequest(prompt, filePath, additionalImages = {}) {
   if (!initializeGemini()) {
     throw new Error(
       "Gemini API key not configured. Please set your API key in the settings."
@@ -155,22 +212,32 @@ async function makeLLMRequest(prompt, filePath) {
 \`\`\`
 ${tradingDocumentContext}
 \`\`\`
-
-**USER REQUEST:**
 `;
   }
 
-  // Add user's prompt
-  fullPrompt += prompt || "Analyze this screenshot and provide trading insights.";
+  // Add learning context
+  fullPrompt += learningService.getContextForPrompt();
+
+  fullPrompt += `\n\n**USER REQUEST:**
+${prompt || "Analyze this screenshot and provide trading insights."}`;
 
   const promptParts = [{ text: fullPrompt }];
 
-  if (filePath) {
-    if (!fs.existsSync(filePath)) {
-      throw new Error("Screenshot file not found");
-    }
-    // Add the image part to our prompt
+  // Add main screenshot
+  if (filePath && fs.existsSync(filePath)) {
     promptParts.push(fileToGenerativePart(filePath, "image/png"));
+  }
+
+  // Add daily chart
+  if (additionalImages.daily && fs.existsSync(additionalImages.daily)) {
+    promptParts.push({ text: "\n**DAILY CHART:**" });
+    promptParts.push(fileToGenerativePart(additionalImages.daily, "image/png"));
+  }
+
+  // Add 1-hour chart
+  if (additionalImages.oneHour && fs.existsSync(additionalImages.oneHour)) {
+    promptParts.push({ text: "\n**1-HOUR CHART:**" });
+    promptParts.push(fileToGenerativePart(additionalImages.oneHour, "image/png"));
   }
 
   try {
@@ -179,15 +246,13 @@ ${tradingDocumentContext}
     });
 
     const response = result.response;
-
-    // Extract text content directly using the text() method
     const content = response.text();
     const usage = response.usageMetadata;
 
     console.log("=== Gemini Response ===");
     console.log("Content length:", content.length);
     console.log("Token usage:", usage);
-    console.log("Document context included:", !!tradingDocumentContext);
+    console.log("Additional images:", Object.keys(additionalImages));
     console.log("======================");
 
     return {
@@ -209,4 +274,5 @@ module.exports = {
   loadTradingDocument,
   clearTradingDocument,
   getTradingDocumentStatus: () => !!tradingDocumentContext,
+  learningService, // ADD THIS LINE
 };

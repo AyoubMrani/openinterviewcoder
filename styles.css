@@ -706,3 +706,162 @@ body.compact-mode .trading-doc-indicator {
 body.compact-mode .indicator-icon {
   font-size: 12px;
 }
+
+/* Feedback Popup Styles */
+.feedback-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: all;
+  -webkit-app-region: no-drag;
+}
+
+.feedback-container {
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.feedback-container h3 {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.feedback-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.feedback-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  pointer-events: all;
+}
+
+.feedback-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.useful-btn:hover {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.not-useful-btn:hover {
+  background: rgba(244, 67, 54, 0.3);
+  border-color: rgba(244, 67, 54, 0.5);
+}
+
+.success-btn:hover {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.fail-btn:hover {
+  background: rgba(244, 67, 54, 0.3);
+  border-color: rgba(244, 67, 54, 0.5);
+}
+
+.trade-result {
+  margin-top: 20px;
+}
+
+.trade-result p {
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+/* Market Selector Styles */
+.market-selector {
+  margin-bottom: 16px;
+}
+
+.market-selector label {
+  display: block;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.market-selector select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  cursor: pointer;
+  pointer-events: all;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.market-selector select:focus {
+  outline: none;
+  border-color: #007aff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.market-selector select option {
+  background: #1a1a1a;
+  color: white;
+}
+
+#custom-market,
+#text-custom-market {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  margin-top: 8px;
+  pointer-events: all;
+}
+
+#custom-market:focus,
+#text-custom-market:focus {
+  outline: none;
+  border-color: #007aff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Market Badge */
+.market-badge {
+  display: inline-block;
+  background: rgba(0, 122, 255, 0.2);
+  border: 1px solid rgba(0, 122, 255, 0.4);
+  color: rgba(0, 122, 255, 1);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}

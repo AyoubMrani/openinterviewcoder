@@ -126,7 +126,68 @@ function setupEventListeners() {
 
   // Listen for mode changes
   window.electronAPI.onModeChanged(handleModeChange);
+  // ADD THIS LINE:
+  setupMarketSelector();
 
+}
+
+// Save/load last market preference
+function saveLastMarket(market) {
+  localStorage.setItem('lastMarket', market);
+}
+
+function loadLastMarket() {
+  return localStorage.getItem('lastMarket') || 'EURUSD';
+}
+
+// In setupMarketSelector function, add:
+function setupMarketSelector() {
+  const marketSelect = document.getElementById("market-select");
+  const customMarketInput = document.getElementById("custom-market");
+  const textMarketSelect = document.getElementById("text-market-select");
+  const textCustomMarketInput = document.getElementById("text-custom-market");
+  const lastMarket = loadLastMarket();
+  if (marketSelect) marketSelect.value = lastMarket;
+  if (textMarketSelect) textMarketSelect.value = lastMarket;
+
+  if (marketSelect && customMarketInput) {
+    marketSelect.addEventListener("change", (e) => {
+      saveLastMarket(e.target.value);
+      if (e.target.value === "CUSTOM") {
+        customMarketInput.style.display = "block";
+        customMarketInput.focus();
+      } else {
+        customMarketInput.style.display = "none";
+      }
+    });
+  }
+
+  if (textMarketSelect && textCustomMarketInput) {
+    textMarketSelect.addEventListener("change", (e) => {
+      if (e.target.value === "CUSTOM") {
+        textCustomMarketInput.style.display = "block";
+        textCustomMarketInput.focus();
+      } else {
+        textCustomMarketInput.style.display = "none";
+      }
+    });
+  }
+}
+
+function getSelectedMarket(isTextQuestion = false) {
+  const selectId = isTextQuestion ? "text-market-select" : "market-select";
+  const customInputId = isTextQuestion ? "text-custom-market" : "custom-market";
+
+  const select = document.getElementById(selectId);
+  const customInput = document.getElementById(customInputId);
+
+  if (!select) return "Not specified";
+
+  if (select.value === "CUSTOM" && customInput.value.trim()) {
+    return customInput.value.trim();
+  }
+
+  return select.value;
 }
 
 function handleModeChange(data) {
@@ -157,41 +218,16 @@ function updateTokenDisplay(current, max) {
 
 function handleLLMResponse(data) {
   debugLog("LLM Response received:", data);
-  debugLog("Current message ID:", currentMessageId);
-  debugLog("Chat history element:", chatHistory);
 
-  console.log("LLM Response received by UI:", data);
-  typingIndicator.classList.remove("visible"); // Hide typing indicator
+  typingIndicator.classList.remove("visible");
 
   if (!data.success) {
     addErrorMessage(data.error || "An unknown error occurred.");
     return;
   }
 
-  // Find the pending message element and update it
   let messageEl = document.querySelector(`[data-message-id="${currentMessageId}"]`);
   if (messageEl) {
-    const contentWrapper = messageEl.querySelector(".message-content");
-    if (contentWrapper) {
-      // Make sure marked is available
-      if (typeof marked !== 'undefined' && marked.parse) {
-        contentWrapper.innerHTML = marked.parse(data.content);
-      } else {
-        // Fallback if marked is not available
-        contentWrapper.textContent = data.content;
-      }
-
-      // Ensure the message is visible
-      messageEl.style.display = "block";
-      messageEl.style.opacity = "1";
-
-      scrollToBottom();
-    }
-  } else {
-    console.error("Message element not found for ID:", currentMessageId);
-    // Create it if it doesn't exist
-    messageEl = createMessageElement(currentMessageId);
-    chatHistory.appendChild(messageEl);
     const contentWrapper = messageEl.querySelector(".message-content");
     if (contentWrapper) {
       if (typeof marked !== 'undefined' && marked.parse) {
@@ -205,14 +241,73 @@ function handleLLMResponse(data) {
     }
   }
 
-  // Update the message in the state array
+  // Show feedback popup after 2 seconds
+  if (data.analysisId) {
+    setTimeout(() => showFeedbackPopup(data.analysisId), 2000);
+  }
+
   const messageIndex = messages.findIndex((m) => m.messageId === currentMessageId);
   if (messageIndex !== -1) {
     messages[messageIndex].content = data.content;
     messages[messageIndex].status = "completed";
   }
 
-  currentMessageId = null; // Reset for the next request
+  currentMessageId = null;
+}
+
+let currentAnalysisId = null;
+
+function showFeedbackPopup(analysisId) {
+  currentAnalysisId = analysisId;
+
+  // Create feedback popup
+  const popup = document.createElement("div");
+  popup.className = "feedback-overlay";
+  popup.innerHTML = `
+    <div class="feedback-container">
+      <h3>How was this analysis?</h3>
+      <div class="feedback-buttons">
+        <button class="feedback-btn useful-btn" data-useful="true">👍 Useful</button>
+        <button class="feedback-btn not-useful-btn" data-useful="false">👎 Not Useful</button>
+      </div>
+      <div class="trade-result" style="display: none;">
+        <p>Did the trade succeed?</p>
+        <div class="feedback-buttons">
+          <button class="feedback-btn success-btn" data-result="true">✅ Yes</button>
+          <button class="feedback-btn fail-btn" data-result="false">❌ No</button>
+          <button class="feedback-btn skip-btn" data-result="null">⏭️ Skip</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(popup);
+
+  // Handle useful/not useful
+  popup.querySelectorAll(".feedback-btn[data-useful]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const wasUseful = btn.dataset.useful === "true";
+      popup.querySelector(".feedback-buttons").style.display = "none";
+      popup.querySelector(".trade-result").style.display = "block";
+      popup.dataset.wasUseful = wasUseful;
+    });
+  });
+
+  // Handle trade result
+  popup.querySelectorAll(".feedback-btn[data-result]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const wasUseful = popup.dataset.wasUseful === "true";
+      const tradeResult = btn.dataset.result === "null" ? null : btn.dataset.result === "true";
+
+      await window.electronAPI.saveFeedback({
+        analysisId: currentAnalysisId,
+        wasUseful: wasUseful,
+        tradeSuccessful: tradeResult,
+      });
+
+      popup.remove();
+    });
+  });
 }
 
 // Handle keyboard shortcuts
@@ -291,14 +386,16 @@ async function addScreenshotToChat(data) {
 async function submitQuestion() {
   const input = document.getElementById("question-input");
   const overlay = document.getElementById("question-overlay");
-  const submitBtn = document.getElementById("submit-question");
 
   if (!input || !overlay) return;
 
   const question = input.value.trim();
+  const market = getSelectedMarket(false); // Get selected market
 
-  // If no question, use default prompt
-  const prompt = question || "Analyze this screenshot and provide insights.";
+  // Build prompt with market info
+  const prompt = question
+    ? `**Market: ${market}**\n\n${question}`
+    : `**Market: ${market}**\n\nAnalyze this screenshot and provide trading insights.`;
 
   // Hide overlay
   overlay.style.display = "none";
@@ -309,6 +406,13 @@ async function submitQuestion() {
   // Add screenshot to chat history
   const messageEl = document.createElement("div");
   messageEl.className = "message user";
+
+  // Show market badge
+  const marketBadge = document.createElement("div");
+  marketBadge.className = "market-badge";
+  marketBadge.textContent = market;
+  messageEl.appendChild(marketBadge);
+
   const img = document.createElement("img");
   img.src = `file://${currentScreenshotPath}`;
   img.className = "screenshot-thumbnail";
@@ -327,8 +431,6 @@ async function submitQuestion() {
 
   chatHistory.appendChild(messageEl);
   scrollToBottom();
-
-  // ADD THIS LINE:
   updateNullStateVisibility();
 
   // Show typing indicator
@@ -353,6 +455,7 @@ async function submitQuestion() {
     const result = await window.electronAPI.analyzeScreenshot({
       filePath: currentScreenshotPath,
       prompt: prompt,
+      market: market, // Pass market info
     });
 
     if (!result.success) {
@@ -403,11 +506,15 @@ async function submitTextQuestion() {
   if (!input || !overlay) return;
 
   const question = input.value.trim();
+  const market = getSelectedMarket(true); // Get selected market for text question
 
   if (!question) {
     alert("Please enter a question!");
     return;
   }
+
+  // Build prompt with market info
+  const prompt = `**Market: ${market}**\n\n${question}`;
 
   // Hide overlay
   overlay.style.display = "none";
@@ -415,59 +522,24 @@ async function submitTextQuestion() {
   // Restore mouse ignore state after submitting
   await window.electronAPI.restoreMouseIgnore();
 
-  // Add user message to chat
-  const userMessage = {
-    type: "user",
-    timestamp: Date.now(),
-    content: question,
-  };
-  messages.push(userMessage);
-
+  // Add user message to chat with market badge
   const userMessageEl = document.createElement("div");
   userMessageEl.className = "message user";
-  userMessageEl.textContent = question;
+
+  const marketBadge = document.createElement("div");
+  marketBadge.className = "market-badge";
+  marketBadge.textContent = market;
+  userMessageEl.appendChild(marketBadge);
+
+  const questionText = document.createElement("div");
+  questionText.textContent = question;
+  userMessageEl.appendChild(questionText);
+
   chatHistory.appendChild(userMessageEl);
   scrollToBottom();
   updateNullStateVisibility();
 
-  // Show typing indicator
-  typingIndicator.classList.add("visible");
-
-  // Add a placeholder for the assistant's response
-  currentMessageId = Date.now().toString();
-  const assistantMessage = {
-    type: "assistant",
-    timestamp: Date.now(),
-    messageId: currentMessageId,
-    content: "",
-    status: "pending",
-  };
-  messages.push(assistantMessage);
-
-  const assistantMessageEl = createMessageElement(currentMessageId);
-  chatHistory.appendChild(assistantMessageEl);
-  debugLog("Created assistant message element:", assistantMessageEl);
-  debugLog("Message ID:", currentMessageId);
-  scrollToBottom();
-
-  try {
-    // Use testResponse since there's no screenshot
-    const result = await window.electronAPI.testResponse(question);
-
-    if (!result.success) {
-      typingIndicator.classList.remove("visible");
-      addErrorMessage(result.error);
-      if (assistantMessageEl) {
-        assistantMessageEl.remove();
-      }
-    }
-  } catch (error) {
-    typingIndicator.classList.remove("visible");
-    addErrorMessage(error.message);
-    if (assistantMessageEl) {
-      assistantMessageEl.remove();
-    }
-  }
+  // ... rest of existing code remains the same ...
 }
 
 async function cancelTextQuestion() {
