@@ -1,4 +1,13 @@
 require("dotenv").config();
+// Suppress experimental fetch warning
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+  if (warning.name === 'ExperimentalWarning' &&
+    warning.message.includes('Fetch API')) {
+    return; // Ignore fetch warnings
+  }
+  console.warn(warning);
+});
 const {
   app,
   BrowserWindow,
@@ -202,15 +211,13 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
   try {
     // Get the market from data
     const market = data.market || "default";
-    
-    // Build path to data folder for this market
     const dataFolder = path.join(app.getPath("userData"), "data", market);
-    
+
     console.log("=== Analyze Screenshot Debug ===");
     console.log("Market:", market);
     console.log("Data folder:", dataFolder);
     console.log("Screenshot path:", data.filePath);
-    
+
     // Ensure data folder exists
     if (!fs.existsSync(dataFolder)) {
       fs.mkdirSync(dataFolder, { recursive: true });
@@ -220,15 +227,18 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
     // Get daily and 1-hour charts
     const dailyPath = path.join(dataFolder, "daily.png");
     const oneHourPath = path.join(dataFolder, "1hour.png");
-    
+
     const dataImages = {
       daily: fs.existsSync(dailyPath) ? dailyPath : null,
       oneHour: fs.existsSync(oneHourPath) ? oneHourPath : null,
     };
-    
+
+    const missingCharts = !dataImages.daily || !dataImages.oneHour;
+
     console.log("Daily chart:", dataImages.daily ? "Found" : "Not found");
     console.log("1-hour chart:", dataImages.oneHour ? "Found" : "Not found");
     console.log("================================");
+
 
     const prompt = data.prompt || "Analyze this screenshot and provide trading insights.";
 
@@ -255,6 +265,8 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
         success: true,
         content: result.content,
         analysisId: analysisId,
+        missingCharts: missingCharts, // ADD THIS
+        market: market, // ADD THIS
       });
 
       event.sender.send("token-usage-updated", {
@@ -262,7 +274,7 @@ ipcMain.handle("analyze-screenshot", async (event, data) => {
         max: maxInputTokens,
       });
     }
-    return { success: true };
+    return { success: true, missingCharts };
   } catch (error) {
     console.error("Analyze screenshot error:", error);
     event.sender.send("llm-response", {
@@ -870,6 +882,22 @@ function registerShortcuts() {
     toggleWindowMode();
   });
 
+  // Toggle interaction mode (Command/Ctrl + I)
+  globalShortcut.register("CommandOrControl+I", () => {
+    if (invisibleWindow) {
+      const isIgnoring = invisibleWindow.webContents.isIgnoringMouseEvents;
+      invisibleWindow.setIgnoreMouseEvents(!isIgnoring);
+      invisibleWindow.webContents.isIgnoringMouseEvents = !isIgnoring;
+
+      // Notify renderer about interaction state change
+      invisibleWindow.webContents.send("interaction-mode-changed", {
+        interactive: !isIgnoring
+      });
+
+      console.log(`Interaction mode: ${!isIgnoring ? 'ENABLED' : 'DISABLED'}`);
+    }
+  });
+
   // Window movement shortcuts
   const NUDGE_AMOUNT = 50;
   const screenBounds = screen.getPrimaryDisplay().workAreaSize;
@@ -981,6 +1009,8 @@ app.whenReady().then(async () => {
       console.error("Could not fetch model info on startup.", e.message);
     }
   }
+  const { setupDataFolders } = require('../setup-data-folders');
+  setupDataFolders();
 
   createInvisibleWindow();
   registerShortcuts();

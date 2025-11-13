@@ -251,14 +251,23 @@ ${prompt || "Analyze this screenshot and provide trading insights."}`;
 
     console.log("=== Gemini Response ===");
     console.log("Content length:", content.length);
-    console.log("Token usage:", usage);
-    console.log("Additional images:", Object.keys(additionalImages));
+    if (usage) {
+      const actualTokens = usage.totalTokenCount - (usage.thoughtsTokenCount || 0);
+      const thoughtsTokens = usage.thoughtsTokenCount || 0;
+
+      console.log("Token usage:");
+      console.log("  - User tokens:", usage.promptTokenCount);
+      console.log("  - Response tokens:", usage.candidatesTokenCount);
+      console.log("  - Thoughts tokens:", thoughtsTokens, "(not counted)");
+      console.log("  - Actual total:", actualTokens);
+    }
+    console.log("Images provided:", Object.keys(additionalImages).filter(k => additionalImages[k] !== null).join(', ') || 'none');
     console.log("======================");
 
     return {
       success: true,
       content: content,
-      tokensUsed: usage ? usage.totalTokenCount : 0,
+      tokensUsed: usage ? (usage.totalTokenCount - (usage.thoughtsTokenCount || 0)) : 0,
       model: MODEL_NAME,
     };
   } catch (error) {

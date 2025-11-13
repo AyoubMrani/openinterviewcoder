@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onModeChanged: (callback) =>
     ipcRenderer.on("mode-changed", (event, value) => callback(value)),
 
+  onInteractionModeChanged: (callback) =>
+    ipcRenderer.on("interaction-mode-changed", (event, value) => callback(value)),
+
   // Window position
   onWindowPositionChanged: (callback) =>
     ipcRenderer.on("window-position-changed", (event, value) =>

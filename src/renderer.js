@@ -15,6 +15,7 @@ function debugLog(...args) {
     console.log('[DEBUG]', ...args);
   }
 }
+
 // Initialize marked with options
 if (typeof marked === "undefined") {
   console.error("marked library not loaded");
@@ -36,46 +37,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (error) {
     console.error("Could not get initial token info:", error);
   }
-
 });
 
 // Set up event listeners
 function setupEventListeners() {
-  // Window position update
   window.electronAPI.onWindowPositionChanged((position) => {
     document.body.setAttribute("data-position", position);
   });
 
-  // Handle keyboard shortcuts
   document.addEventListener("keydown", handleKeyboardShortcuts);
-
-  // Handle new screenshots
   window.electronAPI.onScreenshotCaptured(addScreenshotToChat);
-
-  // Handle chat reset
   window.electronAPI.onResetChat(resetChat);
-
-  // Handle response updates
   window.electronAPI.onLLMResponse(handleLLMResponse);
-
-  // +++ ADDED LISTENER FOR TOKEN UPDATES +++
   window.electronAPI.onTokenUsageUpdated((data) => {
     updateTokenDisplay(data.current, data.max);
   });
 
-
-  // Handle chat scrolling
   window.electronAPI.onScrollChat((direction) => {
     const chatContainer = document.querySelector(".chat-container");
     if (chatContainer) {
       if (direction === "up") {
-        chatContainer.scrollTop -= 100; // Scroll up by 100px
+        chatContainer.scrollTop -= 100;
       } else if (direction === "down") {
-        chatContainer.scrollTop += 100; // Scroll down by 100px
+        chatContainer.scrollTop += 100;
       }
     }
   });
-  // Question input handlers
+
   const submitQuestionBtn = document.getElementById("submit-question");
   const cancelQuestionBtn = document.getElementById("cancel-question");
   const questionInput = document.getElementById("question-input");
@@ -89,7 +77,6 @@ function setupEventListeners() {
   }
 
   if (questionInput) {
-    // Submit on Enter (but allow Shift+Enter for new lines)
     questionInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -98,7 +85,6 @@ function setupEventListeners() {
     });
   }
 
-  // Text question handlers
   const submitTextQuestionBtn = document.getElementById("submit-text-question");
   const cancelTextQuestionBtn = document.getElementById("cancel-text-question");
   const textQuestionInput = document.getElementById("text-question-input");
@@ -112,7 +98,6 @@ function setupEventListeners() {
   }
 
   if (textQuestionInput) {
-    // Submit on Ctrl/Cmd+Enter
     textQuestionInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -121,17 +106,16 @@ function setupEventListeners() {
     });
   }
 
-  // Listen for text question show event
   window.electronAPI.onShowTextQuestion(showTextQuestion);
-
   // Listen for mode changes
   window.electronAPI.onModeChanged(handleModeChange);
-  // ADD THIS LINE:
-  setupMarketSelector();
 
+  // Listen for interaction mode changes
+  window.electronAPI.onInteractionModeChanged(handleInteractionModeChange);
+
+  setupMarketSelector();
 }
 
-// Save/load last market preference
 function saveLastMarket(market) {
   localStorage.setItem('lastMarket', market);
 }
@@ -140,7 +124,6 @@ function loadLastMarket() {
   return localStorage.getItem('lastMarket') || 'EURUSD';
 }
 
-// In setupMarketSelector function, add:
 function setupMarketSelector() {
   const marketSelect = document.getElementById("market-select");
   const customMarketInput = document.getElementById("custom-market");
@@ -203,10 +186,20 @@ function handleModeChange(data) {
     debugLog("Switched to full mode");
   }
 
-  // Scroll to bottom after mode change
   setTimeout(() => scrollToBottom(), 100);
 }
 
+function handleInteractionModeChange(data) {
+  const body = document.body;
+
+  if (data.interactive) {
+    body.classList.add("interactive-mode");
+    debugLog("Interaction mode: ENABLED");
+  } else {
+    body.classList.remove("interactive-mode");
+    debugLog("Interaction mode: DISABLED");
+  }
+}
 
 function updateTokenDisplay(current, max) {
   if (!tokenProgressText || !tokenProgressBar) return;
@@ -237,13 +230,14 @@ function handleLLMResponse(data) {
       }
       messageEl.style.display = "block";
       messageEl.style.opacity = "1";
+
+      // Add inline feedback UI if analysisId exists
+      if (data.analysisId) {
+        addInlineFeedback(messageEl, data.analysisId);
+      }
+
       scrollToBottom();
     }
-  }
-
-  // Show feedback popup after 2 seconds
-  if (data.analysisId) {
-    setTimeout(() => showFeedbackPopup(data.analysisId), 2000);
   }
 
   const messageIndex = messages.findIndex((m) => m.messageId === currentMessageId);
@@ -255,62 +249,93 @@ function handleLLMResponse(data) {
   currentMessageId = null;
 }
 
-let currentAnalysisId = null;
-
-function showFeedbackPopup(analysisId) {
-  currentAnalysisId = analysisId;
-
-  // Create feedback popup
-  const popup = document.createElement("div");
-  popup.className = "feedback-overlay";
-  popup.innerHTML = `
-    <div class="feedback-container">
-      <h3>How was this analysis?</h3>
-      <div class="feedback-buttons">
-        <button class="feedback-btn useful-btn" data-useful="true">👍 Useful</button>
-        <button class="feedback-btn not-useful-btn" data-useful="false">👎 Not Useful</button>
-      </div>
-      <div class="trade-result" style="display: none;">
-        <p>Did the trade succeed?</p>
-        <div class="feedback-buttons">
-          <button class="feedback-btn success-btn" data-result="true">✅ Yes</button>
-          <button class="feedback-btn fail-btn" data-result="false">❌ No</button>
-          <button class="feedback-btn skip-btn" data-result="null">⏭️ Skip</button>
-        </div>
+// NEW: Create inline feedback UI under each response
+function addInlineFeedback(messageEl, analysisId) {
+  const feedbackContainer = document.createElement("div");
+  feedbackContainer.className = "inline-feedback";
+  feedbackContainer.innerHTML = `
+    <div class="feedback-question">Was this analysis helpful?</div>
+    <div class="feedback-actions">
+      <button class="feedback-btn useful-btn" data-useful="true">
+        👍 Useful
+      </button>
+      <button class="feedback-btn not-useful-btn" data-useful="false">
+        👎 Not Useful
+      </button>
+    </div>
+    <div class="trade-result-section" style="display: none;">
+      <div class="feedback-question">Did the trade succeed?</div>
+      <div class="feedback-actions">
+        <button class="feedback-btn success-btn" data-result="true">
+          ✅ Yes
+        </button>
+        <button class="feedback-btn fail-btn" data-result="false">
+          ❌ No
+        </button>
+        <button class="feedback-btn skip-btn" data-result="null">
+          ⏭️ Skip
+        </button>
       </div>
     </div>
   `;
 
-  document.body.appendChild(popup);
+  messageEl.appendChild(feedbackContainer);
 
   // Handle useful/not useful
-  popup.querySelectorAll(".feedback-btn[data-useful]").forEach(btn => {
-    btn.addEventListener("click", () => {
+  const usefulBtns = feedbackContainer.querySelectorAll(".feedback-btn[data-useful]");
+  usefulBtns.forEach(btn => {
+    btn.addEventListener("click", async () => {
       const wasUseful = btn.dataset.useful === "true";
-      popup.querySelector(".feedback-buttons").style.display = "none";
-      popup.querySelector(".trade-result").style.display = "block";
-      popup.dataset.wasUseful = wasUseful;
+
+      // Disable useful/not useful buttons and show selected state
+      usefulBtns.forEach(b => {
+        b.disabled = true;
+        b.style.opacity = b === btn ? "1" : "0.3";
+      });
+
+      // Show trade result section
+      const tradeSection = feedbackContainer.querySelector(".trade-result-section");
+      tradeSection.style.display = "block";
+      feedbackContainer.dataset.wasUseful = wasUseful;
+
+      scrollToBottom();
     });
   });
 
   // Handle trade result
-  popup.querySelectorAll(".feedback-btn[data-result]").forEach(btn => {
+  const resultBtns = feedbackContainer.querySelectorAll(".feedback-btn[data-result]");
+  resultBtns.forEach(btn => {
     btn.addEventListener("click", async () => {
-      const wasUseful = popup.dataset.wasUseful === "true";
+      const wasUseful = feedbackContainer.dataset.wasUseful === "true";
       const tradeResult = btn.dataset.result === "null" ? null : btn.dataset.result === "true";
 
-      await window.electronAPI.saveFeedback({
-        analysisId: currentAnalysisId,
-        wasUseful: wasUseful,
-        tradeSuccessful: tradeResult,
-      });
+      try {
+        const result = await window.electronAPI.saveFeedback({
+          analysisId: analysisId,
+          wasUseful: wasUseful,
+          tradeSuccessful: tradeResult,
+        });
 
-      popup.remove();
+        // Show confirmation
+        feedbackContainer.innerHTML = `
+          <div class="feedback-complete">
+            ✓ Thank you for your feedback!
+          </div>
+        `;
+
+        debugLog("Feedback saved:", result);
+      } catch (error) {
+        console.error("Failed to save feedback:", error);
+        feedbackContainer.innerHTML = `
+          <div class="feedback-error">
+            ⚠️ Failed to save feedback
+          </div>
+        `;
+      }
     });
   });
 }
 
-// Handle keyboard shortcuts
 function handleKeyboardShortcuts(event) {
   if (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA") {
     return;
@@ -326,24 +351,20 @@ function handleKeyboardShortcuts(event) {
   }
 }
 
-// Scroll to bottom of chat
 function scrollToBottom() {
   const chatContainer = document.querySelector(".chat-container");
   if (chatContainer) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    // Double-check scroll after a short delay to handle dynamic content
     setTimeout(() => {
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }, 100);
   }
 }
 
-// Create message element
 function createMessageElement(messageId) {
   const messageEl = document.createElement("div");
   messageEl.className = "message assistant";
   messageEl.setAttribute("data-message-id", messageId);
-  // CHANGED: Make it visible immediately
   messageEl.style.display = "block";
 
   const contentWrapper = document.createElement("div");
@@ -353,7 +374,6 @@ function createMessageElement(messageId) {
   return messageEl;
 }
 
-// Add error message
 function addErrorMessage(message) {
   const errorEl = document.createElement("div");
   errorEl.className = "message error";
@@ -365,10 +385,8 @@ function addErrorMessage(message) {
 let currentScreenshotPath = null;
 
 async function addScreenshotToChat(data) {
-  // Store the screenshot path
   currentScreenshotPath = data.filePath;
 
-  // Show the question overlay
   const overlay = document.getElementById("question-overlay");
   const preview = document.getElementById("question-screenshot-preview");
   const input = document.getElementById("question-input");
@@ -378,7 +396,6 @@ async function addScreenshotToChat(data) {
     input.value = "";
     overlay.style.display = "flex";
 
-    // Focus on input after a brief delay
     setTimeout(() => input.focus(), 100);
   }
 }
@@ -390,24 +407,19 @@ async function submitQuestion() {
   if (!input || !overlay) return;
 
   const question = input.value.trim();
-  const market = getSelectedMarket(false); // Get selected market
+  const market = getSelectedMarket(false);
 
-  // Build prompt with market info
   const prompt = question
     ? `**Market: ${market}**\n\n${question}`
     : `**Market: ${market}**\n\nAnalyze this screenshot and provide trading insights.`;
 
-  // Hide overlay
   overlay.style.display = "none";
 
-  // Restore mouse ignore state after submitting
   await window.electronAPI.restoreMouseIgnore();
 
-  // Add screenshot to chat history
   const messageEl = document.createElement("div");
   messageEl.className = "message user";
 
-  // Show market badge
   const marketBadge = document.createElement("div");
   marketBadge.className = "market-badge";
   marketBadge.textContent = market;
@@ -420,7 +432,6 @@ async function submitQuestion() {
   img.addEventListener("click", () => window.electronAPI.openFile(currentScreenshotPath));
   messageEl.appendChild(img);
 
-  // If user asked a question, show it
   if (question) {
     const questionText = document.createElement("div");
     questionText.style.marginTop = "8px";
@@ -433,10 +444,8 @@ async function submitQuestion() {
   scrollToBottom();
   updateNullStateVisibility();
 
-  // Show typing indicator
   typingIndicator.classList.add("visible");
 
-  // Add a placeholder for the assistant's response
   currentMessageId = Date.now().toString();
   const assistantMessage = {
     type: "assistant",
@@ -455,7 +464,7 @@ async function submitQuestion() {
     const result = await window.electronAPI.analyzeScreenshot({
       filePath: currentScreenshotPath,
       prompt: prompt,
-      market: market, // Pass market info
+      market: market,
     });
 
     if (!result.success) {
@@ -464,6 +473,8 @@ async function submitQuestion() {
       if (assistantMessageEl) {
         assistantMessageEl.remove();
       }
+    } else if (result.missingCharts) {
+      showChartWarning(market);
     }
   } catch (error) {
     typingIndicator.classList.remove("visible");
@@ -473,8 +484,25 @@ async function submitQuestion() {
     }
   }
 
-  // Clear the stored path
   currentScreenshotPath = null;
+}
+
+function showChartWarning(market) {
+  const warningEl = document.createElement("div");
+  warningEl.className = "message warning";
+  warningEl.innerHTML = `
+    <div style="padding: 8px; background: rgba(255, 193, 7, 0.1); border-left: 3px solid #ffc107; border-radius: 4px;">
+      ⚠️ <strong>Charts not found for ${market}</strong><br>
+      <span style="font-size: 12px; color: rgba(255, 255, 255, 0.7);">
+        Add daily.png and 1hour.png to:<br>
+        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">
+          %AppData%/open-interview-coder/data/${market}/
+        </code>
+      </span>
+    </div>
+  `;
+  chatHistory.appendChild(warningEl);
+  scrollToBottom();
 }
 
 function cancelQuestion() {
@@ -485,7 +513,6 @@ function cancelQuestion() {
   currentScreenshotPath = null;
 }
 
-// ADD THESE NEW FUNCTIONS HERE:
 function showTextQuestion() {
   const overlay = document.getElementById("text-question-overlay");
   const input = document.getElementById("text-question-input");
@@ -494,7 +521,6 @@ function showTextQuestion() {
     input.value = "";
     overlay.style.display = "flex";
 
-    // Focus on input after a brief delay
     setTimeout(() => input.focus(), 100);
   }
 }
@@ -506,23 +532,19 @@ async function submitTextQuestion() {
   if (!input || !overlay) return;
 
   const question = input.value.trim();
-  const market = getSelectedMarket(true); // Get selected market for text question
+  const market = getSelectedMarket(true);
 
   if (!question) {
     alert("Please enter a question!");
     return;
   }
 
-  // Build prompt with market info
   const prompt = `**Market: ${market}**\n\n${question}`;
 
-  // Hide overlay
   overlay.style.display = "none";
 
-  // Restore mouse ignore state after submitting
   await window.electronAPI.restoreMouseIgnore();
 
-  // Add user message to chat with market badge
   const userMessageEl = document.createElement("div");
   userMessageEl.className = "message user";
 
@@ -539,10 +561,8 @@ async function submitTextQuestion() {
   scrollToBottom();
   updateNullStateVisibility();
 
-  // Show typing indicator
   typingIndicator.classList.add("visible");
 
-  // Add a placeholder for the assistant's response
   currentMessageId = Date.now().toString();
   const assistantMessage = {
     type: "assistant",
@@ -558,7 +578,6 @@ async function submitTextQuestion() {
   scrollToBottom();
 
   try {
-    // FIXED: Call testResponse instead of analyzeScreenshot for text-only questions
     const result = await window.electronAPI.testResponse(prompt);
 
     if (!result.success) {
@@ -583,12 +602,9 @@ async function cancelTextQuestion() {
     overlay.style.display = "none";
   }
 
-  // Restore mouse ignore state when canceling
   await window.electronAPI.restoreMouseIgnore();
 }
 
-
-// Reset chat
 function resetChat() {
   chatHistory.innerHTML = "";
   messages = [];
@@ -600,16 +616,13 @@ function updateNullStateVisibility() {
   const chatHistory = document.getElementById("chat-history");
 
   if (nullState && chatHistory) {
-    // Hide null state if there are any messages
     const hasMessages = chatHistory.children.length > 0;
     nullState.style.display = hasMessages ? "none" : "flex";
   }
 }
 
-// Handle test response
 async function handleTestResponse(prompt) {
   try {
-    // Add user message
     const userMessage = {
       type: "user",
       timestamp: Date.now(),
@@ -625,7 +638,6 @@ async function handleTestResponse(prompt) {
     typingIndicator.classList.add("visible");
     console.log("Showing typing indicator for new test response");
 
-    // Add assistant message placeholder
     currentMessageId = Date.now().toString();
     const assistantMessage = {
       type: "assistant",
@@ -647,23 +659,20 @@ async function handleTestResponse(prompt) {
       throw new Error(result.error);
     }
 
-    // Update the message with the response
     const contentWrapper = assistantMessageEl.querySelector(".message-content");
     if (contentWrapper) {
       if (result.content && typeof result.content === "string") {
         contentWrapper.innerHTML = marked.parse(result.content);
       } else {
-        contentWrapper.innerHTML = ""; // Clear content if it's null/undefined or not a string
+        contentWrapper.innerHTML = "";
       }
       assistantMessageEl.classList.remove("loading");
       scrollToBottom();
     }
 
-    // Update the message in the messages array
     assistantMessage.content = result.content;
     assistantMessage.status = "completed";
 
-    // Hide typing indicator
     typingIndicator.classList.remove("visible");
     console.log("Test response complete, hiding typing indicator");
   } catch (error) {
